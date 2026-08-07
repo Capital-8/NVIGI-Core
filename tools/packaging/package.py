@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: MIT
+
 import argparse
 import copy
 from functools import cmp_to_key
@@ -20,14 +23,26 @@ catch2_ext = [{"dep":"catch2", "target":"all", "path":"external/catch2",
 
 cuda_ext =[{"dep":"cuda", "target":"win-x64", "path":"external/cuda", 
                  "name":"cuda", "version":"v12.8.0-windows-x64","host_platform":"windows-x86_64"},
+# NV_ARM64_BEGIN
+           {"dep":"cuda_arm64", "target":"win-arm64", "path":"external/cuda_arm64", 
+                 "name":"cuda", "version":"v13.4-dev-prev-x64-arm64","host_platform":"windows-x86_64"}
+# NV_ARM64_END
 ]
 
 cig_scheduler_settings_ext = [{"dep":"cig_scheduler_settings", "target":"win-x64", "path":"external/cig_scheduler_settings", 
-                           "name":"cig_scheduler_settings_win64", "version":"202603161727-a5f373c0-main","host_platform":"windows-x86_64"},
+                           "name":"cig_scheduler_settings_win64", "version":"202607221930-fa6ebe89-main","host_platform":"windows-x86_64"},
+# NV_ARM64_BEGIN
+                              {"dep":"cig_scheduler_settings_arm64", "target":"win-arm64", "path":"external/cig_scheduler_settings_arm64", 
+                           "name":"cig_scheduler_settings_win_internal", "version":"202607221930-fa6ebe89-main","host_platform":"windows-x86_64"}
+# NV_ARM64_END
 ]
 
 nvapi_ext = [{"dep":"nvapi", "target":"win-x64", "path":"external/nvapi", 
                    "name":"nvapi", "version":"r575-public-windows-x86_64","host_platform":"windows-x86_64"},
+# NV_ARM64_BEGIN
+             {"dep":"nvapi_arm64", "target":"win-arm64", "path":"external/nvapi_arm64", 
+                   "name":"nvapi_internal_x64_aarch64", "version":"580.87","host_platform":"windows-x86_64"}
+# NV_ARM64_END
 ]
 
 agility_sdk_ext = [{"dep":"agility-sdk-code", "target":"all", "path":"external/agility-sdk",
@@ -41,6 +56,10 @@ amd_ags_ext = [{"dep":"amd-ags", "target":"all", "path":"external/amd-ags",
 vulkan_ext = [
     {"dep":"vulkansdk", "target":"win-x64", "path":"external/vulkanSDK",
                            "name":"vulkansdk", "version":"1.4.321.1-windows-x86_64","host_platform":"windows-x86_64"},
+# NV_ARM64_BEGIN
+    {"dep":"vulkansdk_arm64", "target":"win-arm64", "path":"external/vulkanSDK_arm64",
+                           "name":"VulkanSDK", "version":"1.4.321.1-windows-x86_64-arm64","host_platform":"windows-x86_64"}
+# NV_ARM64_END
 ]
 
 curl_ext = [{"dep":"libcurl", "target":"win-x64", "path":"external/libcurl",
@@ -52,11 +71,19 @@ zlib_ext = [{"dep":"zlib", "target":"win-x64", "path":"external/zlib",
 ]
 
 cudaDlls = {'win-x64':[ 'external/cuda/bin/cudart64_12.dll' ],
+# NV_ARM64_BEGIN
+              'win-arm64':[ 'external/cuda_arm64/bin/arm64/cudart64_13.dll' ]
+# NV_ARM64_END
 }
 
 cuptiDlls =  {'win-x64':[
     'external/cuda/extras/CUPTI/lib64/cupti64_2025.1.0.dll',
-    'external/cig_scheduler_settings/bin/x64/Release/cig_scheduler_settings.dll'],
+    'external/cig_scheduler_settings/bin/Release_x64/cig_scheduler_settings.dll'],
+# NV_ARM64_BEGIN
+    'win-arm64':[
+        'external/cuda_arm64/extras/CUPTI/lib/arm64/cupti64_2026.3.0.dll',
+        'external/cig_scheduler_settings_arm64/bin/Release_arm64/cig_scheduler_settings.dll']
+# NV_ARM64_END
 }
 
 amd_agsDll =  {'win-x64':[
@@ -71,9 +98,15 @@ net_dlls = {'win-x64':[
 
 all_plat = [
     'win-x64',
+# NV_ARM64_BEGIN
+    'win-arm64'
+# NV_ARM64_END
     ]
 arch_suffixes = {
     'win-x64':'x64',
+# NV_ARM64_BEGIN
+    'win-arm64':'arm64',
+# NV_ARM64_END
 }
 
 all_components = {
@@ -86,7 +119,7 @@ all_components = {
         'runtime_sources': ['utils/nvigi.cig_compatibility_checker', 'utils/nvigi.dsound', 'utils/nvigi.wav'],
         'premake': 'source/core/premake.lua',
         '3rdparty': amd_agsDll,
-        'docs': ['Architecture.md', 'PluginDevelopmentGuide.md', 'PluginDevelopmentTutorial.md', 'GpuSchedulingForAI.md', 'RunningOnMultipleGPUs.md', 'HybridAI.md', 'ProgrammingGuide.md', 'ProgrammingGuideAI.md', 'IntegrationTutorial.md', 'ProgrammingGuideCloudSecurity.md', 'llamacpp_CIG_patch.md'],
+        'docs': ['Architecture.md', 'BuildingAndDebugging.md', 'PluginDevelopmentGuide.md', 'PluginDevelopmentTutorial.md', 'GpuSchedulingForAI.md', 'RunningOnMultipleGPUs.md', 'HybridAI.md', 'ProgrammingGuide.md', 'ProgrammingGuideAI.md'],
         'externals': [agility_sdk_ext, amd_ags_ext, nlohmann_json_ext, nvapi_ext]
     },
     'plugin.hwi.common' : {
@@ -349,6 +382,12 @@ def parse_args():
                         help=f'Support amd64',
                         action='append_const', const='win-x64')
 
+# NV_ARM64_BEGIN
+    parser.add_argument('-arm64', '--arm64',
+                        dest='platforms',
+                        help=f'Support arm64',
+                        action='append_const', const='win-arm64')
+# NV_ARM64_END
 
     default_packman = ""
     parser.add_argument('-packman-only', 
@@ -471,7 +510,8 @@ if __name__ == '__main__':
 
     # Build tools, configs, etc for all SDKs
     copy_list.append((src/'docs/3rd-party-licenses.md', dest_root/'docs', 'all'))
-    copy_list.append((src/'LICENSE.txt', dest_root, 'all'))
+    copy_list.append((src/'LICENSE', dest_root, 'all'))
+    copy_list.append((src/'CONTRIBUTING.md', dest_root, 'all'))
     copy_list.append((src/'NOTICE.txt', dest_root, 'all'))
     copy_list.append((src/'README.md', dest_root, 'all'))
 
@@ -567,11 +607,6 @@ if __name__ == '__main__':
         copy_list.append((src/'tools/packaging/nvigi_utils.py', dest_root/'tools/packaging', 'all'))
         copy_list.append((src/'build.bat', dest_root, 'all'))
         rename_list.append((src/'tools/packman/config.sdk.packman.xml', dest_root/'tools/packman/config.packman.xml', 'all'))
-
-    # Adding extras (for all types of packaging configurations)
-    copy_list.append((src/'extras/llamacpp_CIG_patch/llama.cpp_modifications.patch', dest_root/'extras/llamacpp_CIG_patch', 'all'))
-    copy_list.append((src/'extras/llamacpp_CIG_patch/README.txt', dest_root/'extras/llamacpp_CIG_patch', 'all'))
-    copy_list.append((src/'extras/llamacpp_CIG_patch/setup.bat', dest_root/'extras/llamacpp_CIG_patch', 'all'))
 
     # Perform the copies and renames based upon the staged lists
     [copied, total, renamed] = utils.DoCopy(copy_list, rename_list, dest_root)

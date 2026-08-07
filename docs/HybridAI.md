@@ -39,8 +39,7 @@ Creation properties contain, but are not limited to, the following:
 * Various other properties which are feature/model specific​
 * Feature requirements allow developer to determine if feature can even run locally etc.​
 
-> **IMPORTANT**:
-> Developer has full control over inference backend type, location (cpu, gpu, cloud) and behavior via properties.
+> **IMPORTANT:** Developer has full control over inference backend type, location (cpu, gpu, cloud) and behavior via properties.
 
 ### Instance Data Descriptors
 

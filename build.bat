@@ -1,3 +1,6 @@
+:: SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+:: SPDX-License-Identifier: MIT
+
 @echo off
 setlocal
 
@@ -75,6 +78,11 @@ IF NOT "%1"=="" (
     IF "%1"=="-x64" (
         SET platforms=%platforms% x64
     )
+REM NV_ARM64_BEGIN
+    IF "%1"=="-arm64" (
+        SET platforms=%platforms% ARM64
+    )
+REM NV_ARM64_END
     SHIFT
     GOTO :loop
 )

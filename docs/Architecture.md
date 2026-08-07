@@ -6,7 +6,7 @@ Here are some key points about NVIGI:
 
 * flexible and backwards compatible external and internal **explicit** API
 * allows independent plugin development and deployment
-* mix and match of different plugins from different SDK is totally fine
+* mix and match of different plugins from different SDKs is totally fine
 * each plugin can implement one or more interfaces as needed
 
 ## Typed And Versioned Structures
@@ -29,7 +29,7 @@ NVIGI_VALIDATE_STRUCT(InferenceInstance);
 Once shipped, structures cannot be modified other than appending new members **at the end and increasing the version**. Structures can be used as C style interfaces or simple data containers as needed.
 
 > IMPORTANT:
-> When creating new structures always use the [provided utility executable](./Development.md#guid-creation-for-interfaces-and-plugins)
+> When creating new structures always use the [provided utility executable](./PluginDevelopmentGuide.md#guid-creation-for-interfaces-and-plugins)
 
 ### Interfaces
 
@@ -66,7 +66,7 @@ struct alignas(8) InferenceInstance
 
 ## Core
 
-The NVIGI core component `nvigi.core.framework` scans directories specified by the host for any NVIGI plugins, enumerates them and maps the plugin feature ids with the interfaces they implement. Plugin manager
+The NVIGI core component `nvigi.core.framework` scans directories specified by the host for any NVIGI plugins, enumerates them and maps the plugin feature ids with the interfaces they implement. The plugin manager
 ensures that plugins are digitally signed, supported on the system and that correct API version is used so we don't end up loading a plugin with the newer API.
 
 > IMPORTANT:
@@ -268,7 +268,7 @@ Result nvigiPluginDeregister()
     //! 
     //! Use your interface(s) to destroy instance(s) or context(s)
     //! then do all de-initialization, memory de-allocations etc. within
-    //! the API which is exposed with your interface(s)., *
+    //! the API which is exposed with your interface(s).
 
     return kResultOk;
 }
@@ -314,7 +314,7 @@ NVIGI_API nvigi::Result nvigiInit(const nvigi::Preferences &pref, uint64_t sdkVe
 > IMPORTANT:
 > After calling nvigiInit **no plugins are started** - they are simply enumerated and ready to provide interfaces on demand.
 
-### Interface loading
+### Interface Loading
 
 When a specific interface is needed the following API can be used to obtain it:
 
@@ -339,7 +339,7 @@ NVIGI_API nvigi::Result nvigiLoadInterface(nvigi::PluginID feature, const nvigi:
 ```
 > IMPORTANT: This API allows new plugins to be loaded and registered **after** `nvigiInit` has been called
 
-### Interface unloading
+### Interface Unloading
 
 When a specific interface is no longer needed the following API can be used to unload it and free all resources associated with it:
 

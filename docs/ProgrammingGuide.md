@@ -3,7 +3,7 @@
 
 This guide primarily focuses on the general use of the In-Game Inferencing, including how to initialize it and utilize its interfaces.
 
-> **IMPORTANT**: This guide might contain pseudo code, for the up to date implementation and source code which can be copy pasted please see the SDK Samples
+> **IMPORTANT:** This guide might contain pseudo code, for the up to date implementation and source code which can be copy pasted please see the SDK Samples
 
 ## Table of Contents
 - [Introduction](#introduction)
@@ -24,7 +24,7 @@ This guide primarily focuses on the general use of the In-Game Inferencing, incl
   - [Crash Dumps and Exceptions](#crash-dumps-and-exceptions)
 
 
-## INTRODUCTION
+## Introduction
 
 NVIGI functions as a plugin manager that provides **secure plugin loading** and an **explicit** API, giving the host application complete control over every aspect of NVIGI's usage.
 
@@ -76,7 +76,7 @@ Note that we are chaining common properties to our main properties like this:
     }
 ```
 
-> **IMPORTANT**: Chaining can fail when sharing the same structure across multiple chains which is NOT allowed unless the shared structure is the leaf (at the end in all chains; this is NOT recommended practice)
+> **IMPORTANT:** Chaining can fail when sharing the same structure across multiple chains which is NOT allowed unless the shared structure is the leaf (at the end in all chains; this is NOT recommended practice)
 
 Now we provide additional information about D3D12 context, assuming the host application is using D3D graphics API:
 ```cpp
@@ -136,7 +136,7 @@ if (sampler)
     }
 }
 ```
-> NOTE: In this example, since interface in question supports `nvigi::GPTSamplerParameters`, sampler parameters can be chained together with the `nvigi::GPTCreationParameters` and serve as input (see the [above section](#input-data)) if it is required to change any sampler related options when creating the instance.
+> **NOTE:** In this example, since interface in question supports `nvigi::GPTSamplerParameters`, sampler parameters can be chained together with the `nvigi::GPTCreationParameters` and serve as input (see the [above section](#input-data)) if it is required to change any sampler related options when creating the instance.
 ## Thread Safety
 
 By default, any API in NVIGI is NOT thread safe **unless stated otherwise in the comment above the API declaration**. For example:
@@ -179,7 +179,7 @@ if(nvigi::security::verifyEmbeddedSignature(pathToNVIGICore.wstring().c_str()))
 }
 ```
 
-> IMPORTANT: Failure to check for digital signature on `nvigi.core.framework.dll` can result in executing potentially dangerous code with a wide range of consequences.
+> **IMPORTANT:** Failure to check for digital signature on `nvigi.core.framework.dll` can result in executing potentially dangerous code with a wide range of consequences.
 
 As mentioned above, `nvigi.core.framework.dll` will NOT check any signatures on 3rd party dependencies. This is a security vulnerability and must be addressed by the host application either by enforcing CRC checks on all DLLs or some other method which ensures that libraries haven't been tampered with before loading them. 
 
@@ -189,11 +189,11 @@ When running on non NVIDIA hardware shared libraries like `amd_ags_x64.dll` can 
 
 ### Elevated Privileges
 
-> NOTE: This is related only to Windows platform, Linux users can skip this section
+> **NOTE:** This is related only to Windows platform, Linux users can skip this section
 
 If the host process is running with elevated privileges **NVIGI core will attempt to downgrade some of them to mitigate security risks**. If this behavior is not desirable it can be overridden by setting `PreferenceFlags::eDisablePrivilegeDowngrade` flag. 
 
-> IMPORTANT: Please note that **when opting out from the privilege downgrade, the host application is taking over the responsibility for any security breaches that might occur** in this scenario, it is highly recommended to install the NVIGI bits in secure location which can be modified only by admin users.
+> **IMPORTANT:** Please note that **when opting out from the privilege downgrade, the host application is taking over the responsibility for any security breaches that might occur** in this scenario, it is highly recommended to install the NVIGI bits in secure location which can be modified only by admin users.
 
 Here is the list of privileges in question:
 
@@ -247,7 +247,7 @@ pref.utf8PathToDependencies = myPathToNVIGISharedPluginDependencies;
 pref.logMessageCallback = myCallback; // OPTIONAL
 pref.utf8PathToLogsAndData = myPathToLogs; // OPTIONAL but highly recommended, much easier to track down any issues
 ```
-> NOTE: In non-production builds preferences can be overridden via `nvigi.core.framework.json` file if placed next to the `nvigi.core.framework.dll`. This allows user to change logging level, path to plugins, log file etc. without having to change the code.
+> **NOTE:** In non-production builds preferences can be overridden via `nvigi.core.framework.json` file if placed next to the `nvigi.core.framework.dll`. This allows user to change logging level, path to plugins, log file etc. without having to change the code.
 ```cpp
 // Optional info about system and plugins
 nvigi::PluginAndSystemInformation* info{};
@@ -268,8 +268,7 @@ However, in this scenario where no plugin directories are provided, it is **mand
 
 > Initial scanning of the shared plugin directory in `nvigiInit` can be optimized by not placing unused plugins in the directory.
 
-> **IMPORTANT**:
-> NVIGI SDK can come in various configurations (debug, release, production etc.) which can contain `different 3rd party dependencies`. To avoid runtime issues it is absolutely essential to use correct set of NVIGI plugins combined with matching set of 3rd party dependencies - do NOT mix debug, release etc.
+> **IMPORTANT:** NVIGI SDK can come in various configurations (debug, release, production etc.) which can contain `different 3rd party dependencies`. To avoid runtime issues it is absolutely essential to use correct set of NVIGI plugins combined with matching set of 3rd party dependencies - do NOT mix debug, release etc.
 
 ### Shutdown
 
@@ -310,8 +309,7 @@ NVIGI_API nvigi::Result nvigiLoadInterface(nvigi::PluginID feature, const nvigi:
 
 It is important to emphasize that this API allows the host to provide an additional path to a plugin which implements this interface. In other words, **not all plugin locations need to be known when `nvigiInit` is called**.
 
-> NOTE:
-> This API will load and make resident in memory the shared library which matches the `PluginID` (unless it is already loaded due to earlier request for an interface it implements)
+> **NOTE:** This API will load and make resident in memory the shared library which matches the `PluginID` (unless it is already loaded due to earlier request for an interface it implements)
 
 **It is highly recommended** to use the templated helpers `nvigiGetInterface` or `nvigiGetInterfaceDynamic` depending on the linking option used in the host application:
 
@@ -360,8 +358,7 @@ When a certain interface is no longer needed, it should be unloaded so that the 
 NVIGI_API nvigi::Result nvigiUnloadInterface(nvigi::PluginID feature, void* _interface);
 ```
 
-> NOTE:
-> Interfaces are reference counted so the underlying shared library will be released only when ALL references to the requested interface(s) are released.
+> **NOTE:** Interfaces are reference counted so the underlying shared library will be released only when ALL references to the requested interface(s) are released.
 
 ## Validation
 
@@ -409,8 +406,7 @@ if(NVIGI_FAILED(result, nvigi::isPluginExportingInterface(info, nvigi::plugin::$
 }
 ```
 
-> IMPORTANT:
-> At this point NO SHARED LIBRARIES (PLUGINS) ARE LOADED NOR RESIDENT IN MEMORY, only upon an explicit request for an interface implemented by a specific plugin will that plugin be loaded.
+> **IMPORTANT:** At this point NO SHARED LIBRARIES (PLUGINS) ARE LOADED NOR RESIDENT IN MEMORY, only upon an explicit request for an interface implemented by a specific plugin will that plugin be loaded.
 
 ## D3D Considerations
 ### Streamline
@@ -423,7 +419,7 @@ Please note that D3D12 based plugins require a device which is at least SM 6.6 c
 |------------------------|--------------------------------------------------|---------------------------------------|
 | GPU UPLOAD HEAP (ReBAR)| Windows 11 Insider Preview Build 26080 or later  | 1.613.0                               |
 
-> IMPORTANT: Please note that on some systems ReBAR must be explicitly enabled in the BIOS.
+> **IMPORTANT:** Please note that on some systems ReBAR must be explicitly enabled in the BIOS.
 
 ## 3rd Party Dependencies
 
@@ -472,7 +468,7 @@ $some_path/nvigi
 ├──ggml_40f25557_cuda.dll
 └──zlib1.dll
 ```
-> NOTE: In this scenario both `nvigi::Preferences::utf8PathsToPlugins` and `nvigi::Preferences::utf8PathToDependencies` point to the same location - `$some_path/nvigi`
+> **NOTE:** In this scenario both `nvigi::Preferences::utf8PathsToPlugins` and `nvigi::Preferences::utf8PathToDependencies` point to the same location - `$some_path/nvigi`
 
 #### Split In Multiple Locations
 
@@ -484,7 +480,7 @@ $some_path/nvigi/core
 ├──nvigi.core.framework.dll
 └──cudart64_12.dll // Shared by many plugins so must be in one location
 ```
-> NOTE: Here `nvigi::Preferences::utf8PathToDependencies` points to `$some_path/nvigi/core` but `nvigi::Preferences::utf8PathsToPlugins` points to different locations (see below)
+> **NOTE:** Here `nvigi::Preferences::utf8PathToDependencies` points to `$some_path/nvigi/core` but `nvigi::Preferences::utf8PathsToPlugins` points to different locations (see below)
 
 GPT plugin(s)
 ```cpp
@@ -502,11 +498,11 @@ $some_path/nvigi/asr
 ├──nvigi.plugin.asr.ggml.cuda.dll
 └──tensorRT_11.dll // This is OK as long as other plugins don't use it, this is version 11
 ```
-> NOTE: In the above example, if a new plugin is introduced and uses `tensorRT_10.dll` for example, this shared library now must move to `$some_path/nvigi/core` otherwise we have invalid configuration with duplicated dependency.
+> **NOTE:** In the above example, if a new plugin is introduced and uses `tensorRT_10.dll` for example, this shared library now must move to `$some_path/nvigi/core` otherwise we have invalid configuration with duplicated dependency.
 
 #### Invalid Configurations
 
-> IMPORTANT: Note that in this scenario shared library is duplicated across different locations which is NOT allowed.
+> **IMPORTANT:** Note that in this scenario shared library is duplicated across different locations which is NOT allowed.
 
 ```cpp
 $some_path/nvigi/core
@@ -546,7 +542,7 @@ $some_path/my_app_dependencies
 │
 └──libz.dll // !!! HOST version
 ```
-> NOTE: If similar issue occurs while deploying your application please contact NVIDIA
+> **NOTE:** If similar issue occurs while deploying your application please contact NVIDIA
 
 ## Troubleshooting
 
@@ -566,7 +562,7 @@ C:\\ProgramData\\NVIDIA\\NVIGI\\CrashDumps\\nvigi.test\\1738350995226850
 
 The crash callstack is shown at the end of the log file, providing a detailed trace of the function calls leading to the exception. Developers can use this information to identify the source of the issue. 
 
-> NOTE: To capture as much as detail as possible tne verbose logging should be enabled and path to a log file must be provided when calling `nvigiInit`
+> **NOTE:** To capture as much as detail as possible the verbose logging should be enabled and path to a log file must be provided when calling `nvigiInit`
 
 For example:
 
@@ -590,4 +586,4 @@ KERNEL32:BaseThreadInitThunk:7fff4dcc259d
 ntdll:RtlUserThreadStart:7fff4f94af38
 ```
 
-> NOTE: Symbols can be found in the `nvigi_pack` which can be downloaded from `https://developer.nvidia.com/rtx/in-game-inferencing`
+> **NOTE:** Symbols can be found in the `nvigi_pack` which can be downloaded from `https://developer.nvidia.com/rtx/in-game-inferencing`

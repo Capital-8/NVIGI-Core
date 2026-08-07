@@ -3,7 +3,7 @@
 
 This guide primarily focuses on the general use of the AI plugins performing local or cloud inference. Before reading this please read [the general programming guide](ProgrammingGuide.md)
 
-> **IMPORTANT**: This guide might contain pseudo code, for the up to date implementation and source code which can be copy pasted please see the [basic sample](../source/samples/nvigi.basic/basic.cpp)
+> **IMPORTANT:** This guide might contain pseudo code, for the up to date implementation and source code which can be copy pasted please see the [basic sample](../source/samples/nvigi.basic/basic.cpp)
 
 ## Table of Contents
 - [Introduction](#introduction)
@@ -27,7 +27,7 @@ This guide primarily focuses on the general use of the AI plugins performing loc
   - [Polling Approach](#polling-approach)
   - [Canceling Asynchronous Evaluation](#canceling-asynchronous-evaluation)
   
-## INTRODUCTION
+## Introduction
 
 NVIGI AI plugins provide unified API for both local and cloud inference. This ensures easy transition between local and cloud services and full flexibility. The AI API is located in `nvigi_ai.h` header.
 
@@ -70,7 +70,7 @@ $ROOT/
         └── nvigi.model.config.json
 ```
 
-> NOTE: Each plugin can have as many different models (GUIDs) as needed
+> **NOTE:** Each plugin can have as many different models (GUIDs) as needed
 
 Each model must provide `nvigi.model.config.json` file containing:
 
@@ -109,7 +109,7 @@ Here is an example from `nvigi.plugin.gpt.ggml`, model information for `llama3.1
   }
 }
 ```
-> NOTE: Some models will only be accessible via NGC and require special token for access. These models are normally licensed differently and require developers to contact NVIDIA to obtain access.
+> **NOTE:** Some models will only be accessible via NGC and require special token for access. These models are normally licensed differently and require developers to contact NVIDIA to obtain access.
 
 An optional `configs` subfolder, with the identical subfolder structure, can be added under `$ROOT` to provide `nvigi.model.config.json` overrides as shown below:
 
@@ -124,8 +124,7 @@ $ROOT/
     └── {MODEL_GUID}
         ├── files        
 ```
-> NOTE:
-> This allows quick way of modifying only model config settings in JSON without having to reupload the entire model which can be several GBs in size
+> **NOTE:** This allows a quick way of modifying only model config settings in JSON without having to reupload the entire model which can be several GBs in size
 
 ## Obtaining Models
 
@@ -144,11 +143,11 @@ To add new local model to the model repository please follow these steps:
 * Download model from Hugging Face or other source (NGC etc.)
 * Unzip any archives and ensure correct extension(s) are used (for example if using GGML backend all models must use `.gguf` extension)
 
-> NOTE: Please keep in mind that **some latest models might not work** with the backends provided in this version of NVIGI SDK hence plugin(s) need to be upgraded.
+> **NOTE:** Please keep in mind that **some latest models might not work** with the backends provided in this version of NVIGI SDK hence plugin(s) need to be upgraded.
 
 #### Prompt Templates for LLM Models
 
-Each LLM requirs a correct prompt template. These templates are stored in the above mentioned model configuration JSON and look something like this:
+Each LLM requires a correct prompt template. These templates are stored in the above mentioned model configuration JSON and look something like this:
 ```json
 "prompt_template": [
     "<|begin_of_text|>",
@@ -202,7 +201,7 @@ Hence we make the prompt template like this
       "$assistant"
   ],
 ```
-> NOTE: IGI does NOT automatically add newlines, special care must be taken to include `\n` correctly
+> **NOTE:** IGI does NOT automatically add newlines, special care must be taken to include `\n` correctly
 
 IGI uses the "prompt_template" on either the *first* chat message or if we're using the LLM in instruct mode (no chat history). For the chat mode, the "turn_template" is required for all remaining turns.
 This ensures that the last assistant message is terminated properly (if necessary, sometimes the model auto puts this in), and then replicating the user/assistant turn from the prompt template. 
@@ -258,7 +257,7 @@ which then translates to the `nvigi.model.config.json` file looking like this:
   }
 }
 ```
-> IMPORTANT: Current version of `nvigi.plugin.gpt.cloud.rest` does not support cloud streaming so that option needs to be set to `false`
+> **IMPORTANT:** Current version of `nvigi.plugin.gpt.cloud.rest` does not support cloud streaming so that option needs to be set to `false`
 
 For 3rd party cloud solutions, like for example OpenAI, please have a look at the model with GUID `{E9102ACB-8CD8-4345-BCBF-CCF6DC758E58}` which contains configuration for `gpt-3.5-turbo`. This model can be used the exact same way as any other NIMS based model provided by NVIDIA and also can be used as a template to clone other models which are based on the OpenAI API (just don't forget to generate new GUID). Here is the config file:
 
@@ -280,7 +279,7 @@ For 3rd party cloud solutions, like for example OpenAI, please have a look at th
 }
 ```
 
-> IMPORTANT: If your custom model does not follow the OpenAI API standard for the REST cloud requests, the `request_body` section must be modified to match specific server requirements.
+> **IMPORTANT:** If your custom model does not follow the OpenAI API standard for the REST cloud requests, the `request_body` section must be modified to match specific server requirements.
 
 ## Common And Custom Capabilities and Requirements
 
@@ -337,7 +336,7 @@ When obtaining information about specific model(s) host application can provide 
 
 If specific feature has custom capabilities and requirements the common ones will always be either chained together or returned as a pointer within the custom caps. In addition, if feature is a pipeline (parent plugin encapsulating two or more plugins) it will return caps and requirements for ALL enclosed plugins.  These can be queried from what is returned by the parent plugin's `getCapsAndRequirements` using `nvigi::findStruct<structtype>(rootstruct)`.
 
-> IMPORTANT: Always have a look at the plugin's public header `nvigi_$feature.h` to find out if the plugin has custom caps etc.
+> **IMPORTANT:** Always have a look at the plugin's public header `nvigi_$feature.h` to find out if the plugin has custom caps etc.
 
 ## Creation Parameters
 
@@ -747,8 +746,7 @@ struct alignas(8) FileIOCallbacks {
 };
 ```
 
-> NOTE:
-> Same model GUID can be used by different plugins if they are implementing different backends, for example Whisper GGUF model can be loaded by the `nvigi.plugin.asr.ggml.cuda` and `nvigi.plugin.asr.ggml.cpu` plugins
+> **NOTE:** Same model GUID can be used by different plugins if they are implementing different backends, for example Whisper GGUF model can be loaded by the `nvigi.plugin.asr.ggml.cuda` and `nvigi.plugin.asr.ggml.cpu` plugins
 
 ### Cloud Plugins
 
@@ -872,7 +870,7 @@ Once we have our instance we need to provide input data slots that match the inp
 std::vector<nvigi::InferenceDataSlot> slots = { {nvigi::kASRDataSlotAudio, audioData} };
 nvigi::InferenceDataSlotArray inputs = { slots.size(), slots.data() }; // Input slots
 ```
-> NOTE: STL helpers provide an operator which automatically converts data to the underlying low level type used by NVIGI
+> **NOTE:** STL helpers provide an operator which automatically converts data to the underlying low level type used by NVIGI
 
 ## Execution Context
 
@@ -1001,12 +999,11 @@ if(NVIGI_FAILED(res, asrContext.instance->evaluate(asrContext)))
 }    
 ```
 
-> IMPORTANT:
-> To cancel inference simply return `nvigi::InferenceExecutionStateCancel` in the callback
+> **IMPORTANT:** To cancel inference simply return `nvigi::InferenceExecutionStateCancel` in the callback
 
 ### Polling Approach
 
-> IMPORTANT: This is an optional way to obtain results and each individual plugin must implement special interface `nvigi::IPolledInferenceInterface` in order to enable this functionality. In addition, when using polling, `evaluateAsync` is the ONLY viable inference model since we cannot have blocking calls.
+> **IMPORTANT:** This is an optional way to obtain results and each individual plugin must implement special interface `nvigi::IPolledInferenceInterface` in order to enable this functionality. In addition, when using polling, `evaluateAsync` is the ONLY viable inference model since we cannot have blocking calls.
 
 Before proceeding any further, it is necessary to obtain the polling interface from the plugin, assuming it is actually implemented:
 
@@ -1055,11 +1052,11 @@ while (state == nvigi::InferenceExecutionStateDataPending)
 }
 ```
 
-> NOTE: Even with polling we still ultimately use the callback function to process output slots in the execution context, simply for convenience
+> **NOTE:** Even with polling we still ultimately use the callback function to process output slots in the execution context, simply for convenience
 
 ### Canceling Asynchronous Evaluation
 
-> IMPORTANT: This API is only available for plugins that implement version 3 or higher of the `InferenceInstance` interface. Not all plugins may support cancellation, in which case the API will return `nvigi::ResultNoImplementation`.
+> **IMPORTANT:** This API is only available for plugins that implement version 3 or higher of the `InferenceInstance` interface. Not all plugins may support cancellation, in which case the API will return `nvigi::ResultNoImplementation`.
 
 When using asynchronous evaluation with polling (i.e., `evaluateAsync` with a null callback), you can explicitly cancel an in-progress inference operation by calling the `cancelAsyncEvaluation` method. This is particularly useful when you need to abort a long-running inference task due to user input or application requirements.
 

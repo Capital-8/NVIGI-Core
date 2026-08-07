@@ -29,6 +29,7 @@ struct ResponseBuffer {
     std::string* data;
     uint64_t maxSize;
     uint64_t currentSize = 0;
+    bool limitExceeded = false;
 };
 
 static size_t curlCallbackWriteStdString(void* contents, size_t size, size_t nmemb, ResponseBuffer* buffer)
@@ -38,6 +39,7 @@ static size_t curlCallbackWriteStdString(void* contents, size_t size, size_t nme
     // Enforce response size limit if configured (0 = unlimited)
     if (buffer->maxSize > 0 && buffer->currentSize + newLength > buffer->maxSize)
     {
+        buffer->limitExceeded = true;
         NVIGI_LOG_ERROR("Response exceeds maximum size limit of %llu bytes (current: %llu, new: %zu)", 
                         buffer->maxSize, buffer->currentSize, newLength);
         return 0; // Abort transfer
@@ -130,6 +132,7 @@ struct StreamingCallbackData {
     void* userdata;
     uint64_t maxSize;
     uint64_t bytesReceived = 0;
+    bool limitExceeded = false;
 };
 
 // Create a custom write callback for streaming data with size limit enforcement
@@ -139,6 +142,7 @@ size_t streamingWriteCallback(void* contents, size_t size, size_t nmemb, void* u
     
     // Enforce streaming size limit if configured (0 = unlimited)
     if (cbData->maxSize > 0 && cbData->bytesReceived + realsize > cbData->maxSize) {
+        cbData->limitExceeded = true;
         NVIGI_LOG_ERROR("Streaming response exceeds maximum size limit of %llu bytes (current: %llu, new: %zu)", 
                         cbData->maxSize, cbData->bytesReceived, realsize);
         return 0; // Abort transfer
@@ -147,6 +151,40 @@ size_t streamingWriteCallback(void* contents, size_t size, size_t nmemb, void* u
     cbData->bytesReceived += realsize;
     return cbData->callback(static_cast<const char*>(contents), realsize, cbData->userdata);
 };
+
+static Result translateCurlResult(CURLcode result, bool responseLimitExceeded)
+{
+    if (result == CURLE_OK)
+    {
+        return kResultOk;
+    }
+    if (result == CURLE_OPERATION_TIMEDOUT)
+    {
+        return kResultNetTimeout;
+    }
+    if (result == CURLE_WRITE_ERROR && responseLimitExceeded)
+    {
+        return kResultNetResponseTooLarge;
+    }
+    return kResultNetCurlError;
+}
+
+static Result getHttpStatusResult(CURL* handle)
+{
+    long statusCode = 0;
+    CURLcode result = curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &statusCode);
+    if (result != CURLE_OK)
+    {
+        NVIGI_LOG_ERROR("Failed to query HTTP response status - %s", curl_easy_strerror(result));
+        return kResultNetCurlError;
+    }
+    if (statusCode >= 400)
+    {
+        NVIGI_LOG_ERROR("HTTP request failed with status %ld", statusCode);
+        return kResultNetServerError;
+    }
+    return kResultOk;
+}
 
 struct Network : public INetworkInternal
 {
@@ -245,7 +283,10 @@ struct Network : public INetworkInternal
 
     virtual Result setAuthToken(const char* token) override final
     {
-        gfnKey = token;
+        // Guard against nullptr: assigning nullptr to std::string is undefined
+        // behavior and crashes the host (e.g. when RESTParameters.authenticationToken
+        // is left null/blank). Treat a null token as an empty token.
+        gfnKey = token ? token : "";
         return kResultOk;
     }
 
@@ -284,12 +325,15 @@ struct Network : public INetworkInternal
         NVIGI_LOG_VERBOSE("Connecting to '%s', awaiting response ...", params.url.c_str());
         auto res = curl_easy_perform(curl);
 
+        Result requestResult = translateCurlResult(res, buffer.limitExceeded);
+        if (requestResult == kResultOk)
+        {
+            requestResult = getHttpStatusResult(curl);
+        }
+
         if (res != CURLE_OK)
         {
             NVIGI_LOG_ERROR("CURL GET request failed with error - %s", curl_easy_strerror(res));
-            curl_easy_reset(curl);
-            curl_slist_free_all(headers);
-            return kResultNetCurlError;
         }
 
         curl_easy_reset(curl);
@@ -298,7 +342,7 @@ struct Network : public INetworkInternal
         NVIGI_LOG_VERBOSE("CURL GET request returned %llu bytes", buffer.currentSize);
 
         response = std::move(tmp);
-        return kResultOk;
+        return requestResult;
     }
 
     virtual Result httpPost(const Parameters& params, std::string& response) override final
@@ -334,17 +378,26 @@ struct Network : public INetworkInternal
         NVIGI_LOG_VERBOSE("Connecting to '%s', awaiting response ...", params.url.c_str());
         auto res = curl_easy_perform(curl);
         
+        Result requestResult = translateCurlResult(res, buffer.limitExceeded);
+        if (requestResult == kResultOk)
+        {
+            requestResult = getHttpStatusResult(curl);
+        }
+
         if (res != CURLE_OK)
         {
             NVIGI_LOG_ERROR("CURL POST request returned %llu bytes - %s", buffer.currentSize, tmp.c_str());
             NVIGI_LOG_ERROR("CURL POST request failed with error - %s", curl_easy_strerror(res));
-            curl_easy_reset(curl);
-            curl_slist_free_all(headers);
-            return kResultNetCurlError;
         }
 
         curl_easy_reset(curl);
         curl_slist_free_all(headers);
+
+        if (requestResult != kResultOk)
+        {
+            response = std::move(tmp);
+            return requestResult;
+        }
 
         // If status polling is enabled, parse as JSON and poll for completion (NVCF-style)
         if (params.enableStatusPolling)
@@ -454,7 +507,7 @@ struct Network : public INetworkInternal
             headers = curl_slist_append(headers, ("Authorization: Bearer " + bearerToken).c_str());
         }
 
-        StreamingCallbackData callbackData = { callback, userdata, params.maxStreamingSizeBytes, 0 };
+        StreamingCallbackData callbackData = { callback, userdata, params.maxStreamingSizeBytes, 0, false };
 
         curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
         curl_easy_setopt(curl, CURLOPT_POST, 1L);
@@ -468,18 +521,21 @@ struct Network : public INetworkInternal
         NVIGI_LOG_VERBOSE("Connecting to '%s' for streaming response ...", params.url.c_str());
         auto res = curl_easy_perform(curl);
         
+        Result requestResult = translateCurlResult(res, callbackData.limitExceeded);
+        if (requestResult == kResultOk)
+        {
+            requestResult = getHttpStatusResult(curl);
+        }
+
         if (res != CURLE_OK)
         {
             NVIGI_LOG_ERROR("CURL streaming POST request failed with error - %s", curl_easy_strerror(res));
-            curl_easy_reset(curl);
-            curl_slist_free_all(headers);
-            return kResultNetCurlError;
         }
 
         NVIGI_LOG_VERBOSE("Streaming completed, received %llu bytes", callbackData.bytesReceived);
         curl_easy_reset(curl);
         curl_slist_free_all(headers);
-        return kResultOk;
+        return requestResult;
     }
 
     virtual Result uploadAsset(const types::string& contentType, const types::string& description, const types::vector<uint8_t>& asset, types::string& assetId) override final
@@ -540,6 +596,11 @@ struct Network : public INetworkInternal
                 curl_easy_setopt(curl, CURLOPT_VERBOSE, verboseMode ? 1 : 0);
 
                 auto res = curl_easy_perform(curl);
+                Result requestResult = translateCurlResult(res, buffer.limitExceeded);
+                if (requestResult == kResultOk)
+                {
+                    requestResult = getHttpStatusResult(curl);
+                }
 
                 curl_easy_reset(curl);
                 curl_slist_free_all(headers);
@@ -549,8 +610,8 @@ struct Network : public INetworkInternal
                 if (res != CURLE_OK)
                 {
                     NVIGI_LOG_ERROR("CURL request failed with error - %s", curl_easy_strerror(res));
-                    return kResultNetCurlError;
                 }
+                if (requestResult != kResultOk) return requestResult;
             }
             catch (std::exception& e)
             {

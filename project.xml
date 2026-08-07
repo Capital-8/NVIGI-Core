@@ -9,7 +9,7 @@
 		<package name="catch2" version="2.13.9-7011809a" platforms="windows-x86_64"/>
 	</dependency>
 	<dependency name="cig_scheduler_settings" linkPath="external/cig_scheduler_settings">
-		<package name="cig_scheduler_settings_win64" version="202603161727-a5f373c0-main" platforms="windows-x86_64"/>
+		<package name="cig_scheduler_settings_win64" version="202607221930-fa6ebe89-main" platforms="windows-x86_64"/>
 	</dependency>
 	<dependency name="cuda" linkPath="external/cuda">
 		<package name="cuda" version="v12.8.0-windows-x64" platforms="windows-x86_64"/>

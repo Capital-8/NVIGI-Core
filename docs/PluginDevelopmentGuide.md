@@ -2,6 +2,20 @@
 
 This is an advanced developer document, designed for those who wish to create their own NVIGI plugins.  Before reading this document please read [the architecture document](./Architecture.md).  While writing a plugin only requires a copy of the NVIGI Core PDK (Plugin Development Kit), most of the plugins of interest are a part of the overall main SDK.  As a result, this document will make frequent reference to plugins from the main SDK when discussing concrete examples.
 
+> **IMPORTANT:** The NVIGI 1.7.0 RTX Spark Developer Preview:
+>- Does NOT support building for the ARM64 target the **core libraries** or the **plugins themselves** from the full source posted to GitHub.
+>- DOES still support building the entire SDK (inc. core and plugins) x64 target from GitHub source
+>- DOES support building the samples provided with the binary releases from the source in the release packs for either platform.
+>- An upcoming full release for RTX Spark will add support for building the entire SDK including core libraries and the plugins themselves for ARM64 target from source.
+
+## Conventions
+
+The following placeholders are used in this document:
+
+- `<SDK_PLATFORM>`: the target CPU architecture.  Replace with either `x64` or `arm64`.
+- `<Configuration>`: the build configuration.  Replace with `Debug`, `Release`, or `Production`.
+- `[sdk]`: the root directory of any packaged NVIGI SDK (a pre-packaged release, `[root]`, or a locally-packaged build, `[root]/_sdk`).
+
 ## Breaking ABI
 
 In terminology below, "Breaking ABI" or "ABI-Breaking" means that a change is made that causes a compiled object with an understanding of
@@ -21,15 +35,14 @@ Making these types of changes is acceptable **only when working on the plugin's 
 
 ## Implementing a Plugin
 
-> IMPORTANT:
-> There should be no need to edit any core source code outside of `source/plugins/nvigi.myplugin` and `source/tests/ai/main.cpp`, if changes are needed in the In-Game Inferencing core components please ask for assistance from your NVIDIA Developer Relations Manager (see below).  Modifying core APIs or behaviors in `nvigi.core.framework` in any way can (and likely will) make the modified core malfunction or even fail to load standard NVIGI plugins.
+> **IMPORTANT:** There should be no need to edit any core source code outside of `source/plugins/nvigi.myplugin` and `source/tests/ai/main.cpp`, if changes are needed in the In-Game Inferencing core components please ask for assistance from your NVIDIA Developer Relations Manager (see below).  Modifying core APIs or behaviors in `nvigi.core.framework` in any way can (and likely will) make the modified core malfunction or even fail to load standard NVIGI plugins.
 
 ### Kinds of Plugins
 
 Technically, NVIGI plugins are simply dynamic link libraries that export a set of interfaces, and may have a set of plugin-specific structs that are used as inputs and outputs.  But in most IGI use cases, plugins fall into one of two categories:
 
-1. **Utility Plugins:** These plugins do not tend to follow any specific interface standards, other than the basic functions required of all plugins for loading, unloading, and interface discovery.  There are several such plugins in the NVIGICore itself, specifically the `nvigi.plugin.hwi.*` plugins, which provide interfaces for connecting NVIGI and it plugins to the various hardware and rendering APIs.  The standard NVIGI SDK includes a utility plugin for network behavior.  Note that not all utility plugins are designed to be used by the application.  Some utility plugins, like the main SDK's networking plguin, does not export any app-facing interfaces; it is designed to have its interfaces loaded and used only by other plugins.
-1. **Inference Plugins:** These plugins are designed specifically for some form of AI inference, and follow a more specific standard set of interfaces.  Creating inference plugins that follow these standards (discussed below) will allow you plugin to be more easily integrated into applications and into "parent" plugins, such as the main SDK's AI Pipeline plugin.
+1. **Utility Plugins:** These plugins do not tend to follow any specific interface standards, other than the basic functions required of all plugins for loading, unloading, and interface discovery.  There are several such plugins in the NVIGICore itself, specifically the `nvigi.plugin.hwi.*` plugins, which provide interfaces for connecting NVIGI and its plugins to the various hardware and rendering APIs.  The standard NVIGI SDK includes a utility plugin for network behavior.  Note that not all utility plugins are designed to be used by the application.  Some utility plugins, like the main SDK's networking plguin, does not export any app-facing interfaces; it is designed to have its interfaces loaded and used only by other plugins.
+1. **Inference Plugins:** These plugins are designed specifically for some form of AI inference, and follow a more specific standard set of interfaces.  Creating inference plugins that follow these standards (discussed below) will allow your plugin to be more easily integrated into applications and into "parent" plugins, such as the main SDK's AI Pipeline plugin.
 
 ### Critical Reminders
 
@@ -41,7 +54,7 @@ Technically, NVIGI plugins are simply dynamic link libraries that export a set o
 * **Do NOT forget to clearly mark your exported methods as thread safe or not** - this is normally done in the comment section above the function declaration.
 * **Do NOT duplicate interface or plugin GUIDs** - always create new GUID when cloning an existing interface or data structure
 * **Do NOT ship plugins unless they are PRODUCTION builds, DIGITALLY SIGNED and packaged on GitLab or TeamCity**
-  * Shipping non production builds or any builds from someones local machine is strictly forbidden
+  * Shipping non production builds or any builds from someone's local machine is strictly forbidden
 * **Do NOT break other plugins or add unnecessary dependencies between your plugin and others**
 * **Do NOT include internal headers in plugin's public header(s) - only public headers are allowed**  
   * Public headers are always in format `nvigi_xxxx.h` and can only include other public headers or standard C/C++ headers as needed.
@@ -115,7 +128,7 @@ Note the following statement just before the API declaration:
 NVIGI_API nvigi::Result nvigiShutdown();
 ```
 
-> IMPORTANT: When implementing interface(s) for your plugin always make sure to state thread safety clearly.
+> **IMPORTANT:** When implementing interface(s) for your plugin always make sure to state thread safety clearly.
 
 ### Plugin Naming
 
@@ -130,15 +143,14 @@ nvigi.plugin.tts.asqflow-trt
 nvigi.plugin.net
 ```
 
-> NOTE:
-> NVIGI core components are named `nvigi.core.$name` like for example `nvigi.core.framework`
+> **NOTE:** NVIGI core components are named `nvigi.core.$name` like for example `nvigi.core.framework`
 
 ### GUID Creation for Interfaces and Plugins
 
 For creating IDs for plugins the easiest way is to use built in tool (packaged in any SDK `[sdk]`, including a pre-packaged one as `[root]` or a locally-packaged one as `[root]/_sdk`) as follows:
 
 ```sh
-[sdk]/bin/x64/Release/nvigi.tool.utils.exe --plugin nvigi.plugin.$name.$backend.$api
+[sdk]/bin/<SDK_PLATFORM>/<Configuration>/nvigi.tool.utils.exe --plugin nvigi.plugin.$name.$backend.$api
 ```
 which then outputs:
 ```text
@@ -152,7 +164,7 @@ constexpr PluginID kId = {{0x9be1b413, 0xda31, 0x445b,{0xbe, 0x1b, 0x20, 0x30, 0
 When it comes to the interfaces the approach is very similar:
 
 ```sh
-[sdk]/bin/x64/Release/nvigi.tool.utils.exe --interface MyInterface
+[sdk]/bin/<SDK_PLATFORM>/<Configuration>/nvigi.tool.utils.exe --interface MyInterface
 ```
 which generates unique GUID and new interface that looks like this:
 ```text
@@ -175,8 +187,7 @@ struct alignas(8) MyInterface
 };
 ```
 
-> NOTE:
-> The above generated code is automatically copied to the clipboard for easy pasting into your public header `nvigi_$name.h`
+> **NOTE:** The above generated code is automatically copied to the clipboard for easy pasting into your public header `nvigi_$name.h`
 
 ### Files and Folders
 
@@ -195,8 +206,7 @@ source/plugins/nvigi.$name/
 │       └── 3rd party includes, source, libs
 ```
 
-> IMPORTANT:
-> If having a backend makes no sense for your plugin there is no need to have the subfolder for it.
+> **IMPORTANT:** If having a backend makes no sense for your plugin there is no need to have the subfolder for it.
 
 ### New Plugin Setup
 
@@ -250,8 +260,7 @@ class YourPlugin {
 
 In addition, the public git source is also available for many of the shipping plugins as a part of the public [GitHub Plugins source repo](https://github.com/NVIDIA-RTX/NVIGI-Plugins).
 
-> IMPORTANT:
-> All inference plugins are expected to implement the same interface and follow the same execution flow as defined in `source/utils/nvigi.ai`
+> **IMPORTANT:** All inference plugins are expected to implement the same interface and follow the same execution flow as defined in `source/utils/nvigi.ai`
 >
 > The modern framework in `source/plugins/common/plugin_base_ai.hpp` handles async execution, cancellation, and result polling automatically. Your plugin focuses only on the inference logic.
 
@@ -262,12 +271,11 @@ Here are the basic steps for setting up a new plugin performing **completely gen
 * Clone `nvigi.template.generic` folder and rename it to your plugin's name
 * Rename public header `nvigi_template.h` to match your name
 * Search for "tmpl", "template", "Template" and "TEMPLATE" and replace with your name
-* Run `[sdk]/bin/x64/Release/nvigi.tool.utils.exe --plugin nvigi.plugin.$name.$backend{.$api}` to obtain UID and crc24 and paste that in the public header `nvigi_$name.h` under `namespace nvigi::$mynamespace`
+* Run `[sdk]/bin/<SDK_PLATFORM>/<Configuration>/nvigi.tool.utils.exe --plugin nvigi.plugin.$name.$backend{.$api}` to obtain UID and crc24 and paste that in the public header `nvigi_$name.h` under `namespace nvigi::$mynamespace`
 
 Some examples, `nvigi.plugin.hwi.cuda`, `nvigi.plugin.gpt.ggml.d3d12` etc.
 
-> NOTE:
-> Generic plugins can do rendering, networking or any other custom tasks. If backends make no sense there is no need to use the subfolder.
+> **NOTE:** Generic plugins can do rendering, networking or any other custom tasks. If backends make no sense there is no need to use the subfolder.
 
 #### Common Steps
 
@@ -303,13 +311,11 @@ components = {
 ```py
 'premake': 'source/plugins/nvigi.asr/ggml/premake.lua',
 ```
-* Run `setup.bat vs20xx` 
+* Run `setup.bat [-x64|-arm64]` 
 
-> NOTE:
-> If `setup.bat` fails with an error from the `packman` package downloader, please re-run `setup.bat` again as there are rare but possible issues with link-creation on initial run.
+> **NOTE:** If `setup.bat` fails with an error from the `packman` package downloader, please re-run `setup.bat` again as there are rare but possible issues with link-creation on initial run.
 
-> NOTE:
-> If it makes things easier it is totally fine to clone and modify **any existing plugin** (gpt, asr etc.) to speed up development.
+> **NOTE:** If it makes things easier it is totally fine to clone and modify **any existing plugin** (gpt, asr etc.) to speed up development.
 
 ### Building and Code Modifications
 
@@ -325,14 +331,14 @@ components = {
 
 * Modify `package.py` to include your plugin(s) in the final SDK
 * Make sure to include ONLY the public header(s), DLL and symbols for each plugin
-* Run `package.bat -{debug, release, develop, production}` to package SDK locally under `_sdk` folder
+* Run `package.bat -{x64, arm64} -{debug, release, develop, production}` to package SDK locally under `_sdk` folder
 
 ### Using Interfaces
 
 * All interfaces in NVIGI are typed and versioned structures
 * If multiple versions of an interface are available, **it is mandatory to check the version before accessing members v2 or higher+**.
 
-> IMPORTANT: **Always keep in mind that plugins can be updated individually so at any point in time, plugin code can be handed an interface or data structure from another plugin that is older or newer than the one used at the compile time.**
+> **IMPORTANT:** Always keep in mind that plugins can be updated individually so at any point in time, plugin code can be handed an interface or data structure from another plugin that is older or newer than the one used at the compile time.
 
 ```cpp
 //! Obtain interfaces from other plugins or core (if needed)
@@ -369,7 +375,7 @@ else
 }
 ```
 
-> IMPORTANT: Always check versions or interfaces or data structures received from other plugins, they could be older or newer since plugins can be updated independently
+> **IMPORTANT:** Always check versions or interfaces or data structures received from other plugins, they could be older or newer since plugins can be updated independently
 
 ### Modern C++ Plugin Framework
 
@@ -712,8 +718,7 @@ Result nvigiPluginRegister(framework::IFramework* framework)
 }
 ```
 
-> NOTE:
-> Logs and mini-dumps from any exception caught by NVIGI can be found in `%PROGRAM_DATA%\NVIDIA\NVIGI\{APP_NAME}\{UNIQUE_ID}`
+> **NOTE:** Logs and mini-dumps from any exception caught by NVIGI can be found in `%PROGRAM_DATA%\NVIDIA\NVIGI\{APP_NAME}\{UNIQUE_ID}`
 
 ### Input Parameters and Chained Data Structures
 
@@ -732,8 +737,7 @@ nvigi::Result llama2CreateInstance(const nvigi::NVIGIParameters* params, nvigi::
 }
 ```
 
-> IMPORTANT:
-> If you add new NVIGI data structures for your plugin make sure to use utils library as shown [here](#guid-creation-for-interfaces-and-plugins)
+> **IMPORTANT:** If you add new NVIGI data structures for your plugin make sure to use utils library as shown [here](#guid-creation-for-interfaces-and-plugins)
 
 ### Hybrid AI plugins
 
@@ -833,8 +837,7 @@ nvigi.models/
     └── {MODEL_GUID}
         ├── files        
 ```
-> NOTE:
-> This allows quick way of modifying only model config settings in JSON without having to reupload the entire model which can be GBs in size
+> **NOTE:** This allows a quick way of modifying only model config settings in JSON without having to reupload the entire model which can be GBs in size
 
 Various helper methods are available in `source/utils/nvigi.ai/ai.h` allowing easy model enumeration and filtering with custom extension support. Example usage can be found in any existing AI plugin (gpt, asr etc.)
 
@@ -842,7 +845,7 @@ Various helper methods are available in `source/utils/nvigi.ai/ai.h` allowing ea
 
 This document guides you through the process of creating a customized NVIGI GPT plugin, based on the original GPT plugin from the SDK. 
 
-**> IMPORTANT: Although the document uses the GPT plugin as an example, the high-level steps also apply to other plugins.**
+> **IMPORTANT:** Although the document uses the GPT plugin as an example, the high-level steps also apply to other plugins.
 
 ### Steps
 
@@ -890,7 +893,7 @@ In the following instructions, we follow the directory setup described [here](ht
 
 #### Update Names and GUIDs in Source Files
 
-* Find the NVIGI utility `nvigi.tool.utils.exe` located in `NVIGI-Core\bin\x64\Release`
+* Find the NVIGI utility `nvigi.tool.utils.exe` located in `NVIGI-Core\bin\<SDK_PLATFORM>\<Configuration>`
 * Open terminal and run `nvigi.tool.utils.exe --plugin nvigi.plugin.mygpt.ggml.$backend` (make sure to replace `mygpt` and `$backend` accordingly)
 * Open `nvigi_mygpt.h`. This is a public header and will be provided to apps.
 
@@ -976,11 +979,11 @@ The example demonstrates the steps to add the `grammar` parameter. Note that thi
 
 If you need to add completely new structure or new interface (structure with functions defining an API) please follow these steps:
 
-* Find the NVIGI utility `nvigi.tool.utils.exe` located in `NVIGI-Core\bin\x64\Release`
+* Find the NVIGI utility `nvigi.tool.utils.exe` located in `NVIGI-Core\bin\<SDK_PLATFORM>\<Configuration>`
 * Open terminal and run `nvigi.tool.utils.exe --interface MyData` (make sure to replace `MyData` accordingly)
 * Paste the provided code into your `nvigi_mygpt.h` header like for example:
 
-> NOTE: Same command is used for data and interfaces since they are simply typed and versioned structures in NVIGI terminology
+> **NOTE:** Same command is used for data and interfaces since they are simply typed and versioned structures in NVIGI terminology
 
 ```cpp
 

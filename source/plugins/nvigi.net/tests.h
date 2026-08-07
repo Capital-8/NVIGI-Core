@@ -12,6 +12,21 @@
 #include "source/plugins/nvigi.net/net.h"
 #include "external/json/source/nlohmann/json.hpp"
 
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+
+#ifdef NVIGI_WINDOWS
+#include <winsock.h>
+#else
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#endif
+
 using json = nlohmann::json;
 
 namespace nvigi
@@ -20,6 +35,272 @@ namespace net
 {
 namespace tests
 {
+
+#ifdef NVIGI_WINDOWS
+using TestSocket = SOCKET;
+constexpr TestSocket kInvalidTestSocket = INVALID_SOCKET;
+
+inline void closeTestSocket(TestSocket socket)
+{
+    closesocket(socket);
+}
+#else
+using TestSocket = int;
+constexpr TestSocket kInvalidTestSocket = -1;
+
+inline void closeTestSocket(TestSocket socket)
+{
+    close(socket);
+}
+#endif
+
+//! Minimal loopback HTTP server for deterministic transport tests.
+//! It accepts one request, optionally delays, then returns the configured response.
+class LoopbackHttpServer
+{
+public:
+    explicit LoopbackHttpServer(
+        std::string responseBody,
+        std::chrono::milliseconds responseDelay = std::chrono::milliseconds(0),
+        int statusCode = 200)
+        : m_responseBody(std::move(responseBody))
+        , m_responseDelay(responseDelay)
+        , m_statusCode(statusCode)
+    {
+#ifdef NVIGI_WINDOWS
+        WSADATA data{};
+        if (WSAStartup(MAKEWORD(2, 2), &data) != 0)
+        {
+            return;
+        }
+        m_winsockInitialized = true;
+#endif
+
+        m_listenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (m_listenSocket == kInvalidTestSocket)
+        {
+            return;
+        }
+
+        sockaddr_in address{};
+        address.sin_family = AF_INET;
+        address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        address.sin_port = 0;
+
+        if (bind(m_listenSocket, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) != 0 ||
+            listen(m_listenSocket, 1) != 0)
+        {
+            closeTestSocket(m_listenSocket);
+            m_listenSocket = kInvalidTestSocket;
+            return;
+        }
+
+#ifdef NVIGI_WINDOWS
+        int addressLength = sizeof(address);
+#else
+        socklen_t addressLength = sizeof(address);
+#endif
+        if (getsockname(m_listenSocket, reinterpret_cast<sockaddr*>(&address), &addressLength) != 0)
+        {
+            closeTestSocket(m_listenSocket);
+            m_listenSocket = kInvalidTestSocket;
+            return;
+        }
+
+        m_port = ntohs(address.sin_port);
+        m_thread = std::thread([this]() { run(); });
+        m_ready = true;
+    }
+
+    ~LoopbackHttpServer()
+    {
+        m_stopRequested = true;
+        m_waitCondition.notify_all();
+
+        if (m_thread.joinable())
+        {
+            m_thread.join();
+        }
+
+        if (m_listenSocket != kInvalidTestSocket)
+        {
+            closeTestSocket(m_listenSocket);
+            m_listenSocket = kInvalidTestSocket;
+        }
+
+#ifdef NVIGI_WINDOWS
+        if (m_winsockInitialized)
+        {
+            WSACleanup();
+        }
+#endif
+    }
+
+    LoopbackHttpServer(const LoopbackHttpServer&) = delete;
+    LoopbackHttpServer& operator=(const LoopbackHttpServer&) = delete;
+
+    bool isReady() const
+    {
+        return m_ready;
+    }
+
+    std::string url() const
+    {
+        return "http://127.0.0.1:" + std::to_string(m_port) + "/";
+    }
+
+private:
+    bool receiveRequestHeaders(TestSocket client)
+    {
+        constexpr size_t kMaxRequestHeaderSize = 16 * 1024;
+        constexpr auto kRequestTimeout = std::chrono::seconds(2);
+        const auto deadline = std::chrono::steady_clock::now() + kRequestTimeout;
+        std::string request;
+        request.reserve(1024);
+
+        while (!m_stopRequested && request.size() < kMaxRequestHeaderSize &&
+            std::chrono::steady_clock::now() < deadline)
+        {
+            fd_set sockets;
+            FD_ZERO(&sockets);
+            FD_SET(client, &sockets);
+
+            timeval timeout{};
+            timeout.tv_sec = 0;
+            timeout.tv_usec = 100000;
+
+#ifdef NVIGI_WINDOWS
+            int selectResult = select(0, &sockets, nullptr, nullptr, &timeout);
+#else
+            int selectResult = select(client + 1, &sockets, nullptr, nullptr, &timeout);
+#endif
+            if (selectResult == 0)
+            {
+                continue;
+            }
+            if (selectResult < 0)
+            {
+                return false;
+            }
+
+            char buffer[1024];
+            int received = recv(client, buffer, static_cast<int>(sizeof(buffer)), 0);
+            if (received <= 0)
+            {
+                return false;
+            }
+
+            request.append(buffer, static_cast<size_t>(received));
+            if (request.find("\r\n\r\n") != std::string::npos)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    void run()
+    {
+        while (!m_stopRequested)
+        {
+            fd_set sockets;
+            FD_ZERO(&sockets);
+            FD_SET(m_listenSocket, &sockets);
+
+            timeval timeout{};
+            timeout.tv_sec = 0;
+            timeout.tv_usec = 100000;
+
+#ifdef NVIGI_WINDOWS
+            int selectResult = select(0, &sockets, nullptr, nullptr, &timeout);
+#else
+            int selectResult = select(m_listenSocket + 1, &sockets, nullptr, nullptr, &timeout);
+#endif
+            if (selectResult == 0)
+            {
+                continue;
+            }
+            if (selectResult < 0 || m_stopRequested)
+            {
+                return;
+            }
+
+            TestSocket client = accept(m_listenSocket, nullptr, nullptr);
+            if (client == kInvalidTestSocket)
+            {
+                return;
+            }
+
+            // Consume the request before closing the connection. On Windows, closing a
+            // socket with unread inbound data can reset the connection and make curl
+            // discard an otherwise complete response as CURLE_RECV_ERROR.
+            if (!receiveRequestHeaders(client))
+            {
+                closeTestSocket(client);
+                return;
+            }
+
+            if (m_responseDelay.count() > 0)
+            {
+                std::unique_lock<std::mutex> lock(m_waitMutex);
+                if (m_waitCondition.wait_for(lock, m_responseDelay, [this]() { return m_stopRequested.load(); }))
+                {
+                    closeTestSocket(client);
+                    return;
+                }
+            }
+
+            const char* reason = m_statusCode == 200 ? "OK" :
+                (m_statusCode == 503 ? "Service Unavailable" : "Error");
+            std::string response =
+                "HTTP/1.1 " + std::to_string(m_statusCode) + " " + reason + "\r\n" +
+                "Content-Type: application/octet-stream\r\n" +
+                "Content-Length: " + std::to_string(m_responseBody.size()) + "\r\n" +
+                "Connection: close\r\n\r\n" +
+                m_responseBody;
+
+            size_t sent = 0;
+            while (sent < response.size() && !m_stopRequested)
+            {
+#ifdef NVIGI_WINDOWS
+                constexpr int sendFlags = 0;
+#else
+                constexpr int sendFlags = MSG_NOSIGNAL;
+#endif
+                int chunk = send(client, response.data() + sent,
+                    static_cast<int>(response.size() - sent), sendFlags);
+                if (chunk <= 0)
+                {
+                    break;
+                }
+                sent += static_cast<size_t>(chunk);
+            }
+
+#ifdef NVIGI_WINDOWS
+            shutdown(client, 1); // SD_SEND is not defined by legacy winsock.h.
+#else
+            shutdown(client, SHUT_WR);
+#endif
+            closeTestSocket(client);
+            return;
+        }
+    }
+
+    std::string m_responseBody;
+    std::chrono::milliseconds m_responseDelay;
+    int m_statusCode = 200;
+    uint16_t m_port = 0;
+    TestSocket m_listenSocket = kInvalidTestSocket;
+    std::thread m_thread;
+    std::atomic<bool> m_stopRequested = false;
+    std::mutex m_waitMutex;
+    std::condition_variable m_waitCondition;
+    bool m_ready = false;
+#ifdef NVIGI_WINDOWS
+    bool m_winsockInitialized = false;
+#endif
+};
 
 //! Helper: Create default secure parameters
 inline net::Parameters createSecureParams(const std::string& url)
@@ -41,7 +322,7 @@ inline net::Parameters createSecureParams(const std::string& url)
 inline json createChatCompletionBody(const std::string& userMessage, bool stream = false)
 {
     return json::parse(R"({
-        "model": "nvdev/meta/llama-3.2-3b-instruct",
+        "model": "meta/llama-3.1-8b-instruct",
         "messages": [
             {
                 "role": "system",
@@ -111,7 +392,7 @@ TEST_CASE("net_http_blocking", "[net][security][http]")
     REQUIRE(result == nvigi::kResultOk);
     
     // Test that HTTP is blocked by default
-    auto testParams = nvigi::net::tests::createSecureParams("http://httpbin.org/get");
+    auto testParams = nvigi::net::tests::createSecureParams("http://127.0.0.1/");
     testParams.allowHTTP = false;
     
     types::string responseStr;
@@ -127,26 +408,94 @@ TEST_CASE("net_http_blocking", "[net][security][http]")
     REQUIRE(passed);
 }
 
+TEST_CASE("net_http_allowed", "[net][http]")
+{
+    nvigi::net::tests::LoopbackHttpServer server("ok");
+    REQUIRE(server.isReady());
+
+    nvigi::net::INet* inet{};
+    auto result = nvigiGetInterfaceDynamic(plugin::net::kId, &inet, params.nvigiLoadInterface);
+    REQUIRE(result == nvigi::kResultOk);
+
+    auto testParams = nvigi::net::tests::createSecureParams(server.url());
+    testParams.allowHTTP = true;
+
+    types::string responseStr;
+    Result res = inet->nvcfGet(testParams, responseStr);
+
+    bool passed = res == nvigi::kResultOk && responseStr == "ok";
+    NVIGI_LOG_TEST_INFO("[%s] HTTP Allowed - loopback response received",
+        passed ? "PASS" : "FAIL");
+
+    params.nvigiUnloadInterface(plugin::net::kId, inet);
+    REQUIRE(passed);
+}
+
+TEST_CASE("net_invalid_url", "[net][http][errors]")
+{
+    nvigi::net::INet* inet{};
+    auto result = nvigiGetInterfaceDynamic(plugin::net::kId, &inet, params.nvigiLoadInterface);
+    REQUIRE(result == nvigi::kResultOk);
+
+    auto testParams = nvigi::net::tests::createSecureParams("https://[invalid");
+
+    types::string responseStr;
+    Result res = inet->nvcfGet(testParams, responseStr);
+
+    bool passed = res == nvigi::net::kResultNetCurlError;
+    NVIGI_LOG_TEST_INFO("[%s] Invalid URL Handling - malformed URL rejected",
+        passed ? "PASS" : "FAIL");
+
+    params.nvigiUnloadInterface(plugin::net::kId, inet);
+    REQUIRE(passed);
+}
+
+TEST_CASE("net_http_server_error", "[net][http][errors]")
+{
+    nvigi::net::tests::LoopbackHttpServer server("service unavailable", std::chrono::milliseconds(0), 503);
+    REQUIRE(server.isReady());
+
+    nvigi::net::INet* inet{};
+    auto result = nvigiGetInterfaceDynamic(plugin::net::kId, &inet, params.nvigiLoadInterface);
+    REQUIRE(result == nvigi::kResultOk);
+
+    auto testParams = nvigi::net::tests::createSecureParams(server.url());
+    testParams.allowHTTP = true;
+
+    types::string responseStr;
+    Result res = inet->nvcfGet(testParams, responseStr);
+
+    bool passed = res == nvigi::net::kResultNetServerError &&
+        responseStr == "service unavailable";
+    NVIGI_LOG_TEST_INFO("[%s] HTTP Server Error - status and response body propagated",
+        passed ? "PASS" : "FAIL");
+
+    params.nvigiUnloadInterface(plugin::net::kId, inet);
+    REQUIRE(passed);
+}
+
 TEST_CASE("net_response_size_limit", "[net][security][limits]")
 {
+    nvigi::net::tests::LoopbackHttpServer server(std::string(4096, 'x'));
+    REQUIRE(server.isReady());
+
     nvigi::net::INet* inet{};
     auto result = nvigiGetInterfaceDynamic(plugin::net::kId, &inet, params.nvigiLoadInterface);
     REQUIRE(result == nvigi::kResultOk);
     
     // Test that responses exceeding size limit are aborted
-    auto testParams = nvigi::net::tests::createSecureParams("https://httpbin.org/bytes/10000000");
-    testParams.maxResponseSizeBytes = 1024; // 1 KB limit - small enough to be exceeded by any real response
-    testParams.allowHTTP = true; // For testing purposes
+    auto testParams = nvigi::net::tests::createSecureParams(server.url());
+    testParams.maxResponseSizeBytes = 1024;
+    testParams.allowHTTP = true;
     testParams.timeoutSeconds = 15;
     
     types::string responseStr;
     Result res = inet->nvcfGet(testParams, responseStr);
     
-    // Should fail because response exceeds limit
-    bool passed = (res != kResultOk);
+    bool passed = res == nvigi::net::kResultNetResponseTooLarge;
     NVIGI_LOG_TEST_INFO("[%s] Response Size Limit - %s", 
         passed ? "PASS" : "FAIL",
-        passed ? "Large response aborted" : "Size limit not enforced");
+        passed ? "Large response aborted with the expected result" : "Unexpected result");
     
     params.nvigiUnloadInterface(plugin::net::kId, inet);
     REQUIRE(passed);
@@ -154,27 +503,31 @@ TEST_CASE("net_response_size_limit", "[net][security][limits]")
 
 TEST_CASE("net_timeout_configuration", "[net][security][timeout]")
 {
+    nvigi::net::tests::LoopbackHttpServer server(
+        "delayed response", std::chrono::seconds(10));
+    REQUIRE(server.isReady());
+
     nvigi::net::INet* inet{};
     auto result = nvigiGetInterfaceDynamic(plugin::net::kId, &inet, params.nvigiLoadInterface);
     REQUIRE(result == nvigi::kResultOk);
     
     // Test that timeout is enforced
-    auto testParams = nvigi::net::tests::createSecureParams("https://httpbin.org/delay/10");
-    testParams.timeoutSeconds = 2; // 2 second timeout
+    auto testParams = nvigi::net::tests::createSecureParams(server.url());
+    testParams.timeoutSeconds = 1;
     testParams.allowHTTP = true;
     
-    auto start = std::chrono::high_resolution_clock::now();
+    auto start = std::chrono::steady_clock::now();
     types::string responseStr;
     Result res = inet->nvcfGet(testParams, responseStr);
-    auto end = std::chrono::high_resolution_clock::now();
+    auto end = std::chrono::steady_clock::now();
     
-    auto duration = std::chrono::duration_cast<std::chrono::seconds>(end - start).count();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
     
-    // Should timeout in approximately 2 seconds
-    bool passed = (res != kResultOk && duration < 5);
-    NVIGI_LOG_TEST_INFO("[%s] Timeout Configuration - %s (actual: %llds)", 
+    // Check the specific timeout result and reject immediate unrelated failures.
+    bool passed = res == nvigi::net::kResultNetTimeout && duration >= 500 && duration < 4000;
+    NVIGI_LOG_TEST_INFO("[%s] Timeout Configuration - %s (actual: %lldms)",
         passed ? "PASS" : "FAIL",
-        passed ? "Timeout enforced correctly" : "Timeout not working",
+        passed ? "Timeout enforced correctly" : "Unexpected result or duration",
         duration);
     
     params.nvigiUnloadInterface(plugin::net::kId, inet);
@@ -206,7 +559,7 @@ TEST_CASE("net_nvidia_chat_api", "[net][api][nvidia]")
     
     // Create request body using your exact JSON format
     json body = R"({
-        "model" : "nvdev/meta/llama-3.2-3b-instruct",
+        "model" : "meta/llama-3.1-8b-instruct",
         "messages": [
             {
                 "role":"system",
@@ -320,95 +673,6 @@ TEST_CASE("net_nvidia_streaming_api", "[net][api][nvidia][streaming]")
     
     params.nvigiUnloadInterface(plugin::net::kId, inet);
     REQUIRE(passed);
-}
-
-TEST_CASE("net_all_security_tests", "[net][security]")
-{
-    NVIGI_LOG_TEST_INFO("=== Running All Network Security Tests ===");
-    
-    nvigi::net::INet* inet{};
-    auto result = nvigiGetInterfaceDynamic(plugin::net::kId, &inet, params.nvigiLoadInterface);
-    REQUIRE(result == nvigi::kResultOk);
-    
-    int passed = 0;
-    int failed = 0;
-    
-    // Test 1: SSL Verification
-    {
-        auto testParams = nvigi::net::tests::createSecureParams("https://www.google.com");
-        types::string responseStr;
-        Result res = inet->nvcfGet(testParams, responseStr);
-        bool testPassed = (res == kResultOk);
-        NVIGI_LOG_TEST_INFO("[%s] SSL Verification", testPassed ? "PASS" : "FAIL");
-        testPassed ? passed++ : failed++;
-    }
-    
-    // Test 2: HTTP Blocking
-    {
-        auto testParams = nvigi::net::tests::createSecureParams("http://httpbin.org/get");
-        testParams.allowHTTP = false;
-        types::string responseStr;
-        Result res = inet->nvcfGet(testParams, responseStr);
-        bool testPassed = (res != kResultOk);
-        NVIGI_LOG_TEST_INFO("[%s] HTTP Blocking", testPassed ? "PASS" : "FAIL");
-        testPassed ? passed++ : failed++;
-    }
-    
-    // Test 3: HTTP Allowed
-    {
-        auto testParams = nvigi::net::tests::createSecureParams("http://httpbin.org/get");
-        testParams.allowHTTP = true;
-        testParams.timeoutSeconds = 15;
-        types::string responseStr;
-        Result res = inet->nvcfGet(testParams, responseStr);
-        bool testPassed = (res == kResultOk);
-        NVIGI_LOG_TEST_INFO("[%s] HTTP Allowed", testPassed ? "PASS" : "FAIL");
-        testPassed ? passed++ : failed++;
-    }
-    
-    // Test 4: Response Size Limit
-    {
-        auto testParams = nvigi::net::tests::createSecureParams("https://httpbin.org/bytes/10000000");
-        testParams.maxResponseSizeBytes = 1024; // 1 KB limit - small enough to be exceeded by any real response
-        testParams.allowHTTP = true;
-        testParams.timeoutSeconds = 15;
-        types::string responseStr;
-        Result res = inet->nvcfGet(testParams, responseStr);
-        bool testPassed = (res != kResultOk);
-        NVIGI_LOG_TEST_INFO("[%s] Response Size Limit", testPassed ? "PASS" : "FAIL");
-        testPassed ? passed++ : failed++;
-    }
-    
-    // Test 5: Invalid URL
-    {
-        auto testParams = nvigi::net::tests::createSecureParams("https://this-domain-does-not-exist-12345.com");
-        testParams.connectionTimeoutSeconds = 5;
-        types::string responseStr;
-        Result res = inet->nvcfGet(testParams, responseStr);
-        bool testPassed = (res != kResultOk);
-        NVIGI_LOG_TEST_INFO("[%s] Invalid URL Handling", testPassed ? "PASS" : "FAIL");
-        testPassed ? passed++ : failed++;
-    }
-    
-    // Test 6: Credential Redaction
-    {
-        inet->setVerboseMode(true);
-        inet->nvcfSetToken("test-secret-token-12345");
-        auto testParams = nvigi::net::tests::createSecureParams("https://www.google.com");
-        testParams.redactAuthInLogs = true;
-        testParams.timeoutSeconds = 10;
-        types::string responseStr;
-        Result res = inet->nvcfGet(testParams, responseStr);
-        inet->setVerboseMode(false);
-        bool testPassed = true; // Check logs manually for [REDACTED]
-        NVIGI_LOG_TEST_INFO("[%s] Credential Redaction (check logs for [REDACTED])", testPassed ? "PASS" : "FAIL");
-        testPassed ? passed++ : failed++;
-    }
-    
-    NVIGI_LOG_TEST_INFO("=== Security Test Summary: %d passed, %d failed ===", passed, failed);
-    
-    params.nvigiUnloadInterface(plugin::net::kId, inet);
-    REQUIRE(failed == 0);
 }
 
 } // namespace nvigi

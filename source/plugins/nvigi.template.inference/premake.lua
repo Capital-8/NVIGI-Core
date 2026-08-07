@@ -1,3 +1,6 @@
+-- SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+-- SPDX-License-Identifier: MIT
+
 -- Modern AI Plugin Template - Build Configuration
 -- ================================================
 -- This premake configuration demonstrates how to set up a plugin with

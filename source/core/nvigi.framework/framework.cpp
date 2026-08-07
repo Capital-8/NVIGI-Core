@@ -978,6 +978,8 @@ nvigi::Result nvigiShutdownImpl()
             {
                 result = nvigi::kResultInvalidState;
             }
+            internals.hmod = nullptr;
+            internals.pluginDeregister = nullptr;
         }
     }
     ctx->modules.clear();

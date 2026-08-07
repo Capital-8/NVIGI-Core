@@ -1,3 +1,6 @@
+:: SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+:: SPDX-License-Identifier: MIT
+
 @echo off
 set cfg=vs2022
 set platforms=--x64
@@ -14,6 +17,11 @@ IF NOT "%1"=="" (
     ) ELSE IF "%1"=="-x64" (
         REM For now, overwrite any other platfom - one platform at a time for now
         SET platforms=--x64
+REM NV_ARM64_BEGIN
+    ) ELSE IF "%1"=="-arm64" (
+        REM For now, overwrite any other platfom - one platform at a time for now
+        SET platforms=--arm64
+REM NV_ARM64_END
     ) ELSE (
         REM Unrecognized switch, print error message and exit
         echo Error: Unrecognized switch: %1

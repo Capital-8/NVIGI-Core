@@ -1,3 +1,6 @@
+-- SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+-- SPDX-License-Identifier: MIT
+
 group "core"
 
 project "nvigi.core.framework"
@@ -42,6 +45,13 @@ project "nvigi.core.framework"
 		includedirs {ROOT .. "external/nvapi"}
 		links {ROOT .. "external/nvapi/amd64/nvapi64.lib", "dxgi.lib", "Version.lib", "dbghelp.lib"}
 		linkoptions { "/DEF:" .. "\"" .. ROOT .. "source/core/nvigi.framework/exports.def\"" }
+-- NV_ARM64_BEGIN
+	filter {"system:windows", "platforms:arm64"}
+		includedirs {ROOT .. "external/nvapi_arm64"}
+		links {ROOT .. "external/nvapi_arm64/aarch64/nvapia64.lib"}
+		links {"dxgi.lib", "Version.lib", "dbghelp.lib"}
+		linkoptions { "/DEF:" .. "\"" .. ROOT .. "source/core/nvigi.framework/exports.def\"" }
+-- NV_ARM64_END	
 	filter {}
 
 	filter {"system:windows"}
@@ -60,6 +70,13 @@ project "nvigi.core.framework"
 			'{COPYFILE} ../../external/amd-ags/ags_lib/lib/amd_ags_x64.dll %[%{cfg.buildtarget.directory}]'
 		}
 	filter {}
+-- NV_ARM64_BEGIN
+		filter {"system:windows", "platforms:arm64"}
+			-- Note: AMD AGS may not have ARM64 support, skip DLL copy for ARM64
+			-- postbuildcommands {
+			--	'{COPYFILE} ../../external/amd-ags/ags_lib/lib/amd_ags_arm64.dll %[%{cfg.buildtarget.directory}]'
+			-- }
+-- NV_ARM64_END
 		filter {}
 
 group ""

@@ -104,6 +104,15 @@ bool dumpStackTrace(EXCEPTION_POINTERS* ExceptionInfo, std::string& stackTrace)
     stackFrame.AddrFrame.Mode = AddrModeFlat;
     stackFrame.AddrStack.Offset = context->Rsp;
     stackFrame.AddrStack.Mode = AddrModeFlat;
+    // NV_ARM64_BEGIN
+#elif _M_ARM64
+    stackFrame.AddrPC.Offset = context->Pc;
+    stackFrame.AddrPC.Mode = AddrModeFlat;
+    stackFrame.AddrFrame.Offset = context->Fp;
+    stackFrame.AddrFrame.Mode = AddrModeFlat;
+    stackFrame.AddrStack.Offset = context->Sp;
+    stackFrame.AddrStack.Mode = AddrModeFlat;
+    // NV_ARM64_END
 #else
 #error "Platform not supported!"
 #endif
@@ -113,6 +122,10 @@ bool dumpStackTrace(EXCEPTION_POINTERS* ExceptionInfo, std::string& stackTrace)
         IMAGE_FILE_MACHINE_I386,
 #elif _M_X64
         IMAGE_FILE_MACHINE_AMD64,
+        // NV_ARM64_BEGIN
+#elif _M_ARM64
+        IMAGE_FILE_MACHINE_ARM64,
+        // NV_ARM64_END
 #else
 #error "Platform not supported!"
 #endif

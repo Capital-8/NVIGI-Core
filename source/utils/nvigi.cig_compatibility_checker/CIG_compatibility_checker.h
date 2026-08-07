@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <cassert>
 
 #if WITHOUT_IGI
 #include <windows.h>
@@ -97,6 +98,8 @@ namespace CIGCompatibilityChecker
 #endif
     CUcontext gCtxBeforeTest{};
     CUpti_SubscriberHandle gCuptiSubscriber{};
+    bool gCheckerActive = false;
+    bool gContextRestorePending = false;
 #if WITHOUT_IGI
     struct CigD3d12Parameters {
         ID3D12Device* device{};
@@ -530,13 +533,17 @@ namespace CIGCompatibilityChecker
         CUresult cuerr = cuInit(0);
         checkCuErrors(cuerr);
 
+        gContextRestorePending = false;
+
         // Save the current CUDA context so that we can restore it at the end 
         // of the test. This is because a test could change the current context,
         // and we don't want that to affect other tests.
         cuerr = cuCtxGetCurrent(&gCtxBeforeTest);
         checkCuErrors(cuerr);
+        gContextRestorePending = true;
 
         gCheckerState.reset();
+        gCheckerActive = false;
 
 #ifndef NVIGI_DISABLE_CUPTI
         // Register callbacks to allow CUPTI to ask us to allocate activity 
@@ -561,6 +568,7 @@ namespace CIGCompatibilityChecker
             // Enable the state domain callbacks for CUPTI error reporting
             cuptierr = cuptiEnableDomain(1, gCuptiSubscriber, CUPTI_CB_DOMAIN_STATE);
             checkCuptiErrors(cuptierr);
+            gCheckerActive = true;
         }
         else
         {
@@ -718,8 +726,8 @@ namespace CIGCompatibilityChecker
     }
 #endif
 
-    // Call at end of test
-    bool check(bool useCIG = true, int ordinalOfRequestedCudaDevice = -1)
+    // Verify checker state without shutting it down.
+    bool verify(int ordinalOfRequestedCudaDevice = -1)
     {
 #ifdef NVIGI_DISABLE_CUPTI
         return true;
@@ -854,23 +862,50 @@ namespace CIGCompatibilityChecker
         printf("\n");
 #endif
 
-        // Unregister CUPTI callbacks
-        cuptierr = cuptiActivityDisable(CUPTI_ACTIVITY_KIND_CONCURRENT_KERNEL);
-        checkCuptiErrors(cuptierr);
-        cuptierr = cuptiActivityDisable(CUPTI_ACTIVITY_KIND_CONTEXT);
-        checkCuptiErrors(cuptierr);
-        cuptierr = cuptiUnsubscribe(gCuptiSubscriber);
-        checkCuptiErrors(cuptierr);
-
-
-        // Restore CUDA context to what is was before test started
-        CUresult cuerr = cuCtxSetCurrent(gCtxBeforeTest);
-        checkCuErrors(cuerr);
-
         bool contextsOk =
             gCheckerState.nonCigContextsUsed.size() == 0;
 
-        return !useCIG || (gCheckerState.bytesUsedIsCigCompatible && contextsOk);
+        return gCheckerState.bytesUsedIsCigCompatible && contextsOk;
+    }
+
+    // Shut down CUPTI callbacks and restore CUDA context. Safe to call more than once.
+    void shutdown()
+    {
+#ifdef NVIGI_DISABLE_CUPTI
+        return;
+#endif
+        const std::lock_guard<std::mutex> lock(gCheckerState.mutex);
+
+        if (gCheckerActive)
+        {
+            CUptiResult cuptierr = cuptiActivityDisable(CUPTI_ACTIVITY_KIND_CONCURRENT_KERNEL);
+            checkCuptiErrors(cuptierr);
+            cuptierr = cuptiActivityDisable(CUPTI_ACTIVITY_KIND_CONTEXT);
+            checkCuptiErrors(cuptierr);
+            cuptierr = cuptiUnsubscribe(gCuptiSubscriber);
+            checkCuptiErrors(cuptierr);
+            gCuptiSubscriber = {};
+            gCheckerActive = false;
+        }
+
+        // Restore CUDA context to what is was before test started. Guard this
+        // independently from CUPTI teardown so shutdown remains idempotent even
+        // if CUPTI initialization failed or shutdown is called more than once.
+        if (gContextRestorePending)
+        {
+            CUresult cuerr = cuCtxSetCurrent(gCtxBeforeTest);
+            checkCuErrors(cuerr);
+            gContextRestorePending = false;
+        }
+    }
+
+    // Legacy API: verify checker state and shut down the checker.
+    bool check(bool useCIG = true, int ordinalOfRequestedCudaDevice = -1)
+    {
+        bool verifyResult = verify(ordinalOfRequestedCudaDevice);
+        bool ok = !useCIG || verifyResult;
+        shutdown();
+        return ok;
     }
 
     // Size and alignment of the activity buffer
@@ -1343,7 +1378,80 @@ namespace CIGCompatibilityChecker
 
     void resetLaunchCounters() {}
 
-    // Call at end of test
-    bool check(bool = true) { return true; }
+    bool verify(int = -1) { return true; }
+
+    void shutdown() {}
+
+    // Legacy API: verify checker state and shut down the checker.
+    bool check(bool = true, int = -1) { return true; }
 #endif
+
+    // RAII helper for tests that use CIGCompatibilityChecker. The underlying
+    // CUPTI callbacks do not provide user context, so the checker has to use
+    // global state; this wrapper makes cleanup happen reliably at scope exit.
+    // In a test, initialize this before the workload, assert
+    // CHECK(checker.verify()) where failures should be reported, and let the
+    // destructor shut down the CUPTI subscription.
+    class ScopedChecker
+    {
+    public:
+        ScopedChecker() = default;
+
+        ScopedChecker(bool enabled, PFun_nvigiLoadInterface* nvigiLoadInterface, PFun_nvigiUnloadInterface* nvigiUnloadInterface, int ordinalOfRequestedCudaDevice = -1)
+        {
+            if (enabled)
+            {
+                requestedCudaDeviceOrdinal = ordinalOfRequestedCudaDevice;
+                d3d12Parameters = CIGCompatibilityChecker::init(nvigiLoadInterface, nvigiUnloadInterface);
+                initialized = true;
+            }
+        }
+
+        // The checker controls process-global CUPTI subscription state, not a
+        // private resource. Keep ownership local to a single scope so cleanup
+        // is deterministic and cannot be accidentally duplicated or transferred.
+        ScopedChecker(const ScopedChecker&) = delete;
+        ScopedChecker& operator=(const ScopedChecker&) = delete;
+        ScopedChecker(ScopedChecker&&) = delete;
+        ScopedChecker& operator=(ScopedChecker&&) = delete;
+
+        ~ScopedChecker()
+        {
+            if (initialized)
+            {
+                CIGCompatibilityChecker::shutdown();
+            }
+        }
+
+        explicit operator bool() const
+        {
+            return initialized;
+        }
+
+        bool verify() const
+        {
+            if (!initialized) return true;
+
+            return CIGCompatibilityChecker::verify(requestedCudaDeviceOrdinal);
+        }
+
+        void resetLaunchCounters()
+        {
+            if (initialized)
+            {
+                CIGCompatibilityChecker::resetLaunchCounters();
+            }
+        }
+
+        const nvigi::D3D12Parameters& getD3D12Parameters() const
+        {
+            assert(initialized);
+            return d3d12Parameters;
+        }
+
+    private:
+        nvigi::D3D12Parameters d3d12Parameters{};
+        int requestedCudaDeviceOrdinal = -1;
+        bool initialized = false;
+    };
 }

@@ -1,9 +1,17 @@
+-- SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+-- SPDX-License-Identifier: MIT
+
 group "plugins/networking"
 
 	project "nvigi.plugin.net"
 		filter "platforms:x64"
 			kind "SharedLib"
 		filter {}
+-- NV_ARM64_BEGIN
+		filter "platforms:arm64"
+			kind "None"
+		filter {}
+-- NV_ARM64_END
 		
 		pluginBasicSetup("net")
 

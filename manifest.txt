@@ -1,6 +1,7 @@
 	nvigi-core-source/.gitattributes
 	nvigi-core-source/.gitignore
-	nvigi-core-source/LICENSE.txt
+	nvigi-core-source/CONTRIBUTING.md
+	nvigi-core-source/LICENSE
 	nvigi-core-source/NOTICE.txt
 	nvigi-core-source/README.md
 	nvigi-core-source/build.bat
@@ -11,16 +12,14 @@
 	nvigi-core-source\data\nvigi.models\nvigi.plugin.template.inference\{01234567-0123-0123-0123-0123456789AB}/my_model.my_ext2
 	nvigi-core-source\docs/3rd-party-licenses.md
 	nvigi-core-source\docs/Architecture.md
+	nvigi-core-source\docs/BuildingAndDebugging.md
 	nvigi-core-source\docs/GpuSchedulingForAI.md
 	nvigi-core-source\docs/HybridAI.md
-	nvigi-core-source\docs/IntegrationTutorial.md
 	nvigi-core-source\docs/PluginDevelopmentGuide.md
 	nvigi-core-source\docs/PluginDevelopmentTutorial.md
 	nvigi-core-source\docs/ProgrammingGuide.md
 	nvigi-core-source\docs/ProgrammingGuideAI.md
-	nvigi-core-source\docs/ProgrammingGuideCloudSecurity.md
 	nvigi-core-source\docs/RunningOnMultipleGPUs.md
-	nvigi-core-source\docs/llamacpp_CIG_patch.md
 	nvigi-core-source\docs\media/guid-1.png
 	nvigi-core-source\docs\media/guid.png
 	nvigi-core-source\docs\media/hybridai.svg
@@ -29,9 +28,6 @@
 	nvigi-core-source\docs\media/hybridai_api_instance.svg
 	nvigi-core-source\docs\media/hybridai_api_instance_eval.svg
 	nvigi-core-source\docs\media/hybridai_api_instance_pipeline.svg
-	nvigi-core-source\extras\llamacpp_CIG_patch/README.txt
-	nvigi-core-source\extras\llamacpp_CIG_patch/llama.cpp_modifications.patch
-	nvigi-core-source\extras\llamacpp_CIG_patch/setup.bat
 	nvigi-core-source\premake/premake.shared_config.lua
 	nvigi-core-source\premake/premake.shared_plugin.lua
 	nvigi-core-source\premake/premake.utils.lua

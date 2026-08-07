@@ -1,3 +1,6 @@
+-- SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+-- SPDX-License-Identifier: MIT
+
 if os.istarget("windows") then
 
 group "plugins/hwi"
@@ -25,6 +28,20 @@ group "plugins/hwi"
 				externaldir .."cuda//lib/x64",
 				externaldir .."vulkanSDK//Lib"
 			}
+-- NV_ARM64_BEGIN
+		filter {"platforms:arm64"}
+			includedirs {
+				externaldir .."cuda_arm64//include", 
+				externaldir .."cig_scheduler_settings_arm64//include", 
+				externaldir .."vulkanSDK_arm64//Include",
+				"./"
+			}
+			libdirs {
+				-- Note: CUDA ARM64 support may be limited, check if these paths exist
+				externaldir .."cuda_arm64//lib/arm64",
+				externaldir .."vulkanSDK_arm64//Lib-ARM64"
+			}
+-- NV_ARM64_END
 		filter {}
     filter {"system:windows"}
 		links {"cuda.lib", "cudart.lib", "vulkan-1.lib"}		
@@ -35,8 +52,17 @@ group "plugins/hwi"
 		postbuildcommands {
 		  '{COPYFILE} ../../external/cuda/bin/cudart64_12.dll %[%{cfg.buildtarget.directory}]',
 		  '{COPYFILE} ../../external/cuda/extras/CUPTI/lib64/cupti64_2025.1.0.dll %[%{cfg.buildtarget.directory}]',
-		  '{COPYFILE} ../../external/cig_scheduler_settings/bin/x64/Release/cig_scheduler_settings.dll %[%{cfg.buildtarget.directory}]'
+		  '{COPYFILE} ../../external/cig_scheduler_settings/bin/Release_x64/cig_scheduler_settings.dll %[%{cfg.buildtarget.directory}]'
 		}
+-- NV_ARM64_BEGIN
+	filter {"system:windows", "platforms:arm64"}
+		-- Note: Check if ARM64 CUDA DLLs are available
+		postbuildcommands {
+		  '{COPYFILE} ../../external/cuda_arm64/bin/arm64/cudart64_13.dll %[%{cfg.buildtarget.directory}]',
+		  '{COPYFILE} ../../external/cuda_arm64/extras/CUPTI/lib/arm64/cupti64_2026.3.0.dll %[%{cfg.buildtarget.directory}]',
+		  '{COPYFILE} ../../external/cig_scheduler_settings_arm64/bin/Release_arm64/cig_scheduler_settings.dll %[%{cfg.buildtarget.directory}]'
+		}
+-- NV_ARM64_END
 	filter {}
 group ""
 

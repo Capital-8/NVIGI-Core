@@ -117,6 +117,9 @@ private:
             data_{},
             extdata_{}
         {
+// NV_ARM64_BEGIN
+#ifndef _ARM64_
+// NV_ARM64_END
             std::array<int, 4> cpui;
 
             // Calling __cpuid with 0x0 as the function_id argument
@@ -189,6 +192,9 @@ private:
                 memcpy(brand + 32, extdata_[4].data(), sizeof(cpui));
                 brand_ = brand;
             }
+            // NV_ARM64_BEGIN
+#endif
+            // NV_ARM64_END
         };
 
         int nIds_;

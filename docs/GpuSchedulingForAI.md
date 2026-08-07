@@ -2,7 +2,7 @@
 
 Games typically optimize graphics to maximize GPU utilization, so when you add AI compute to a game it is essential to configure the GPU scheduler to minimize the effect on the game's frame rate. This document describes how to do this.
 
-## Supported plugins
+## Supported Plugins
 Optimized GPU scheduling is currently utilized by the following plugins.
 ### CUDA
 * `plugins/sdk` in current SDK
@@ -20,7 +20,7 @@ Optimized GPU scheduling is currently utilized by the following plugins.
 ### Vulkan
 Optimized GPU scheduling for selected Vulkan plugins is planned for a future release. 
 
-## Supported graphics APIs
+## Supported Graphics APIs
 Where optimized GPU scheduling is available, inference compute and graphics workloads may run in parallel on the GPU. NVIGI's GPU scheduling uses D3D async compute for D3D plugins and CUDA in Graphics (CIG) for CUDA plugins. It also takes advantage of a driver interface for setting relative priorities of CUDA vs D3D graphics workloads and D3D compute vs D3D graphics workloads. 
 Optimized GPU scheduling support depends on both the compute API used by the NVIGI plugin, and the Graphics API used by the application. The following table shows the currently supported combinations. In parenthesis is the minimum driver required to get full functionality, including settable priorities and correct interaction with other libraries such as NVIDIA DLFG.
 <table>
@@ -49,14 +49,14 @@ Optimized GPU scheduling support depends on both the compute API used by the NVI
   </tr>
 </table>
 
-(*) CUDA requires that Hardware scheduling be enabled in Windows 10 and 11. Windows 11 has hardware scheduling enabled by default.
+(*) CUDA requires that Hardware scheduling be enabled in Windows 11. Windows 11 has hardware scheduling enabled by default.
 
 (**) Although running Vulkan Compute in parallel with Vulkan Graphics is possible in general, it isn't currently supported in NVIGI. We plan to fix this in a future release.
 
-## A note on performance measurement
+## A Note on Performance Measurement
 It is important not to use GPU begin/end event queries (such as D3D12_QUERY_TYPE_TIMESTAMP or CUDA events) to measure the cost of AI features. The reason is that such measurements do not take into account how much graphics work is running in parallel with the AI compute during the measured interval. For example, if AI is using 10% of the execution units of the GPU for 1ms, and graphics is running in parallel using the other 90%, then queries would report the AI cost as 1ms, which is not correct. Instead it's better to add a way to toggle the AI feature (for example a command line parameter), run a benchmark twice with the feature enabled and disabled, and report the difference in total frame time.
 
-## How to use
+## How to Use
 
 In order to schedule graphics and compute efficiently, NVIGI needs to know the D3D direct queue that your game is using for graphics. To do this, fill in a D3D12Parameters struct and chain it to the parameters of all NVIGI instances that you create. The following example shows how to do this for the ASR plugin. 
 
@@ -80,7 +80,7 @@ In order to schedule graphics and compute efficiently, NVIGI needs to know the D
 
 This ensures that compute work submitted by NVIGI will run efficiently with graphics running in parallel. 
 
-## How to set the relative priority of compute and graphics
+## How to Set the Relative Priority of Compute and Graphics
 In the past GPU compute workloads in games were often directly coupled to graphics frame generation, for example raytracing and animation. In contrast, NVIGI pipelines, consisting of automatic speech recognition (ASR), language models (LM), text to speech (TTS) etc. can run asynchronously to frame generation. Their latency requirements are dictated not by human visual perception (measured in milliseconds), but how fast humans listen, think and speak (measured in hundreds of milliseconds). Each invocation of the pipeline (for example to process a question) can run across many graphics frames. For this reason the workload can be thought of as floating relative to the game’s graphics and compute workload.
 
 For past compute workloads coupled to graphics generation, the compute work was often on the critical path of the graphics frame, and so the hardware executed compute with high priority to try to maximize graphics frame rate.
@@ -119,7 +119,7 @@ You can set the priority at any time using SetGpuInferenceSchedulingMode(). The 
     ihwiCommon->SetGpuInferenceSchedulingMode(SchedulingMode::kPrioritizeGraphics);
     // evaluate() calls for high FPS quest gameplay go here
 
-## CiG and D3D Wrappers (e.g. Streamline)
+## CIG and D3D Wrappers (e.g. Streamline)
 
 Care should be taken when integrating NVIGI into an existing application that is also using a D3D object wrapper like Streamline.  The queue/device parameters passed to NVIGI must be the **native** objects, not the app-level wrappers.  In the case of Streamline, this means using `slGetNativeInterface` to retrieve the base interface object before passing it to NVIGI.
 

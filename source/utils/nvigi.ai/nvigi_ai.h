@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <cstring>
 #include <type_traits>
 #include "nvigi_cpu.h"
 

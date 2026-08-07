@@ -1,3 +1,6 @@
+-- SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+-- SPDX-License-Identifier: MIT
+
 function pluginBasicSetupInternal(name, sdk)
 	targetdir (bindir .. "%{cfg.platform}/%{cfg.buildcfg}")
 	implibdir  (artifactsdir .. "%{prj.name}/%{cfg.platform}/%{cfg.buildcfg}")

@@ -1,3 +1,6 @@
+-- SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+-- SPDX-License-Identifier: MIT
+
 	include ("premake.utils.lua")
 
 	-- _ACTION is the argument you passed into premake5 when you ran it.
@@ -17,14 +20,32 @@
 		platforms { "x64" }
 	end
 
+	-- NV_ARM64_BEGIN
+	newoption {
+		trigger = "arm64",
+		description = "Enable building of ARM64"
+	}
+	-- NV_ARM64_END
 
 	configurations { "Debug", "Production", "Release" }
 
+	-- NV_ARM64_BEGIN
+	if _OPTIONS["arm64"] ~= nil then
+		print("Enabling ARM64 build support")
+		platforms { "arm64" }
+	end
+	-- NV_ARM64_END
 
 	-- Platform-specific architecture settings
 	filter { "platforms:x64" }
 		architecture "x64"
 	filter {}
+	-- NV_ARM64_BEGIN
+	filter { "platforms:arm64" }
+		architecture "ARM64"
+		--	TODO - FIX THIS; needed right now because CUDA 13.1 is causing libcmt conflicts: 
+		-- flags {"FatalWarnings"}
+	-- NV_ARM64_END
 	filter {}
 
 	language "c++"
@@ -66,6 +87,10 @@
 	-- Platform-specific Windows defines
 	filter {"system:windows", "platforms:x64"}
 		defines { "WIN64" }
+	-- NV_ARM64_BEGIN
+	filter {"system:windows", "platforms:arm64"}
+		defines { "WIN64", "_ARM64_" }
+	-- NV_ARM64_END
 	filter {"system:windows"}
 		defines { "_CRT_SECURE_NO_WARNINGS" }
 	-- when building any visual studio project

@@ -361,10 +361,10 @@ itts->createInstance(ttsParams, &ttsInstance);
 ### CUDA Context Management
 - When specifying the GPU to run CUDA inference on, NVIGI will manage the CUDA context for you.
 - CUDA-in-Graphics (CiG) optimizations are only available when inference and graphics run on the same GPU.
-- If using CiG on a multiple GPU system, note that the inference device is determined by the D3D or Vulkan queue passed in D3dParameters or VulkanParameters, not the device passed in CudaParameters.
+- If using CiG on a multiple GPU system, note that the inference device is determined by the D3D or Vulkan queue passed in D3D12Parameters or VulkanParameters, not the device passed in CudaParameters.
 
 ### Vulkan Device Management
-- NvIgi plugins may require Vulkan extensions, and these must be specified at device creation time. See the documentation for each plugin for details.
+- NVIGI plugins may require Vulkan extensions, and these must be specified at device creation time. See the documentation for each plugin for details.
 - Ensure proper extension selection for compute workloads on the inference device.
 - Ensure proper queue family selection for compute workloads on the inference device.
 
